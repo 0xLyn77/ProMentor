@@ -49,7 +49,7 @@ description: 把任意开源项目转成 MIT 风格的动手工程课程：按�
 | `/promentor init --resume` | “接着生成”“刚才断了继续” | 逐章校验文件与校验和完整性，补齐残缺或未完成章节 | `references/commands.md`、`references/generation.md`、`references/languages.md` |
 | `/promentor` / `progress` | “看看进度”“课程目录”“还有几章” | 渲染课程目录、章节状态与总体完成度 | `references/commands.md`、`references/data-format.md` |
 | `/promentor learn <ch>` | “学第 2 章”“进入下一章”“学终章” | 简写匹配 → Commit 锚定检查 → 按需生成未建章节 → 防剧透讲解与布置 Lab | `references/commands.md`、`references/teaching.md`（按需生成时加读 `generation.md`、`languages.md`） |
-| `/promentor test` | “写完了”“帮我测一下”“跑下测试” | 执行 `test_command`，按 Part A/B/C 分层汇报通过与失败诊断 | `references/commands.md` |
+| `/promentor test` | “写完了”“帮我测一下”“跑下测试” | 优先调用 `promentor.py test` 执行测试、校验防篡改并更新分数，按 Part A/B/C 分层诊断 | `references/commands.md` |
 | `/promentor hint` | “卡住了”“报错帮我看看”“这里怎么写” | 触发防代写护栏，结合学生代码与报错给出 Level 1/2/3 分层提示 | `references/commands.md`、`references/teaching.md` |
 | `/promentor submit` | “交作业”“提交”“全过了帮我存档” | 核验 `test_checksum` → 全量测试通过 → 目录制归档 `attempt_{N}/` → 锁定 100% | `references/commands.md`、`references/data-format.md` |
 | `/promentor review` | “对比下源码”“帮我 Review”“看看原项目” | 解锁 `source.md` Part 2 → 五维对比（二次提交自动增量三方对比）→ 落盘 `review_{N}.md` | `references/commands.md`、`references/teaching.md` |
@@ -94,7 +94,7 @@ description: 把任意开源项目转成 MIT 风格的动手工程课程：按�
 
 按当前任务只加载需要的文档，避免无关上下文稀释注意力：
 
-- `scripts/promentor.py` — 确定性辅助脚本（Python ≥ 3.9，零依赖）：`checksum` / `verify` / `gate red|green` / `archive` / `resume-scan` / `exclude`。
+- `scripts/promentor.py` — 确定性辅助脚本（Python ≥ 3.9，零依赖；命令中的 `<skill_dir>` 即当前 `SKILL.md` 所在目录）：`checksum` / `verify` / `gate red|green` / `test` / `archive` / `resume-scan` / `exclude`。
 - `references/commands.md` — 全部子命令完整执行步骤、输出模板、`--resume` 校验清单、Commit 锚定与防篡改校验。
 - `references/data-format.md` — `course.json` / `progress.json` / `lab.json` 完整 JSON Schema、章节 ID 与简写匹配、文档格式规范。
 - `references/generation.md` — 四轮扫描、大项目裁剪、`--focus`、按需生成、Starter Stub、分层测试（Part A/B/C）、Red-State 自检、Mermaid 与跨章解耦。

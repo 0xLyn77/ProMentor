@@ -127,6 +127,15 @@ def run_fixture_lifecycle(
         if rs_proc.returncode != 0 or "OK: all target chapters complete" not in rs_proc.stdout:
             errors.append(f"[{fixture_name}][resume-scan] unexpected output: {rs_proc.stdout}{rs_proc.stderr}")
 
+        # Atomic archive guard: calling archive in Red State MUST fail and leave progress/submissions untouched.
+        red_arch = run_promentor(work_dir, "archive", chapter_id)
+        if red_arch.returncode == 0 or "green gate failed" not in red_arch.stderr:
+            errors.append(f"[{fixture_name}][red-archive-guard] expected green gate rejection, got: {red_arch.stdout}{red_arch.stderr}")
+            return errors
+        if (prom_dir / "submissions" / chapter_id / "attempt_1").exists():
+            errors.append(f"[{fixture_name}][red-archive-guard] attempt_1/ should not exist after failed archive")
+            return errors
+
         # Stage 2: Verify tamper detection blocks both verify and archive.
         ch_dir = prom_dir / "chapters" / chapter_id
         lab = json.loads((ch_dir / "lab.json").read_text(encoding="utf-8"))
@@ -143,11 +152,15 @@ def run_fixture_lifecycle(
         finally:
             test_path.write_bytes(original_test_bytes)
 
-        # Stage 3: Attempt 1 -> gate green -> promentor.py archive -> review_1.md -> verify.
+        # Stage 3: Attempt 1 -> promentor.py test (keeps in_progress) -> atomic archive -> review_1.md -> verify.
         copy_solution_files(src_fixture / "solutions" / "attempt_1", ch_dir)
-        g1 = run_promentor(work_dir, "gate", "green", chapter_id)
-        if g1.returncode != 0:
-            errors.append(f"[{fixture_name}][attempt_1-gate] {g1.stdout}{g1.stderr}")
+        t1 = run_promentor(work_dir, "test")
+        if t1.returncode != 0 or "ALL_PASSED" not in t1.stdout or f"passed={expected_tests}/{expected_tests}" not in t1.stdout:
+            errors.append(f"[{fixture_name}][attempt_1-test] {t1.stdout}{t1.stderr}")
+            return errors
+        prog_before = json.loads((prom_dir / "progress.json").read_text(encoding="utf-8"))
+        if prog_before["chapters"][chapter_id]["status"] != "in_progress":
+            errors.append(f"[{fixture_name}][attempt_1-test] test subcommand must not auto-complete chapter before submit")
             return errors
         a1 = run_promentor(work_dir, "archive", chapter_id)
         if a1.returncode != 0:
@@ -162,12 +175,8 @@ def run_fixture_lifecycle(
             errors.append(f"[{fixture_name}][attempt_1-verify] {v1.stdout}{v1.stderr}")
             return errors
 
-        # Stage 4: Attempt 2 refactor -> gate green -> promentor.py archive -> review_2.md -> verify.
+        # Stage 4: Attempt 2 refactor -> atomic archive (built-in green gate) -> review_2.md -> verify.
         copy_solution_files(src_fixture / "solutions" / "attempt_2", ch_dir)
-        g2 = run_promentor(work_dir, "gate", "green", chapter_id)
-        if g2.returncode != 0:
-            errors.append(f"[{fixture_name}][attempt_2-gate] {g2.stdout}{g2.stderr}")
-            return errors
         a2 = run_promentor(work_dir, "archive", chapter_id)
         if a2.returncode != 0:
             errors.append(f"[{fixture_name}][attempt_2-archive] {a2.stdout}{a2.stderr}")

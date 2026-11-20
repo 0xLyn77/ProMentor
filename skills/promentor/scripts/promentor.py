@@ -18,7 +18,10 @@ from typing import Any
 CHAPTER_ID_RE = re.compile(r"^(ch[0-9]{2}|final)-[a-z0-9]+(-[a-z0-9]+)*$")
 CHECKSUM_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 COMMIT_RE = re.compile(r"^$|^[0-9a-f]{40}$")
-LINE_REF_RE = re.compile(r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_./-]+\.[A-Za-z0-9_]+):(\d+)-(\d+)")
+_PATH_SEG = r"(?:[A-Za-z0-9_@\[\]+.-]+|\([A-Za-z0-9_@\[\]+.-]+\))+"
+LINE_REF_RE = re.compile(
+    rf"(?<![A-Za-z0-9_./@\[\]+-])((?:{_PATH_SEG}/)*{_PATH_SEG}\.[A-Za-z][A-Za-z0-9_]*):(\d+)-(\d+)"
+)
 MERMAID_BLOCK_RE = re.compile(
     r"```mermaid\s*\n\s*(flowchart|graph|sequenceDiagram|classDiagram)\b",
     re.MULTILINE,
@@ -26,15 +29,19 @@ MERMAID_BLOCK_RE = re.compile(
 JS_TS_HOST_GLOB_RE = re.compile(r"\.(test|spec)\.[cm]?[jt]sx?$", re.IGNORECASE)
 PY_CD_REL_VENV_RE = re.compile(r"\bcd\s+[^&;]+&&\s*(?:\./)?\.?venv[/\\]")
 
+HARD_BUILD_ERROR_SIGNATURES = [
+    "[build failed]",
+    "[setup failed]",
+    "command not found",
+    "cannot find package",
+    "no Go files",
+]
+
 INFRA_ERROR_SIGNATURES = [
+    *HARD_BUILD_ERROR_SIGNATURES,
     "ModuleNotFoundError",
     "ImportError",
     "SyntaxError",
-    "command not found",
-    "cannot find package",
-    "[build failed]",
-    "[setup failed]",
-    "no Go files",
     "Ran 0 tests",
     "ERR_MODULE_NOT_FOUND",
     "No such file or directory",
@@ -89,11 +96,35 @@ def is_git_repo(project_root: Path) -> bool:
     return proc.returncode == 0 and proc.stdout.strip() == "true"
 
 
+def normalize_rel_path(project_root: Path, rel_path: str) -> str | None:
+    """Normalize a repo-relative POSIX path and reject absolute or escaping paths."""
+    raw = rel_path.strip()
+    if not raw or raw.startswith("/") or "\\" in raw:
+        return None
+    while raw.startswith("./"):
+        raw = raw[2:]
+    if not raw or raw.startswith("/"):
+        return None
+    parts = [p for p in raw.split("/") if p != "."]
+    if not parts or any(p == ".." or p == "" for p in parts):
+        return None
+    normalized = "/".join(parts)
+    try:
+        resolved = (project_root / normalized).resolve()
+        resolved.relative_to(project_root.resolve())
+    except (OSError, ValueError):
+        return None
+    return normalized
+
+
 def read_source_lines(project_root: Path, rel_path: str, source_commit: str) -> list[str] | None:
     """Read source file anchored to source_commit when available, else from working tree."""
+    norm = normalize_rel_path(project_root, rel_path)
+    if norm is None:
+        return None
     if source_commit and is_git_repo(project_root):
         proc = subprocess.run(
-            ["git", "show", f"{source_commit}:{rel_path}"],
+            ["git", "show", f"{source_commit}:{norm}"],
             cwd=project_root,
             capture_output=True,
             text=True,
@@ -102,7 +133,7 @@ def read_source_lines(project_root: Path, rel_path: str, source_commit: str) -> 
         if proc.returncode != 0:
             return None
         return proc.stdout.splitlines()
-    target = project_root / rel_path
+    target = project_root / norm
     if not target.is_file():
         return None
     return target.read_text(encoding="utf-8").splitlines()
@@ -138,16 +169,31 @@ def check_line_ref(
     origin: str,
     errors: list[str],
 ) -> None:
-    lines = read_source_lines(project_root, rel_path, source_commit)
+    norm = normalize_rel_path(project_root, rel_path)
+    if norm is None:
+        errors.append(f"{origin}: invalid or escaping source path: {rel_path}")
+        return
+    lines = read_source_lines(project_root, norm, source_commit)
     if lines is None:
         ref_scope = f"commit {source_commit[:7]}" if source_commit else "working tree"
-        errors.append(f"{origin}: referenced source file does not exist in {ref_scope}: {rel_path}")
+        errors.append(f"{origin}: referenced source file does not exist in {ref_scope}: {norm}")
         return
     total_lines = len(lines)
     if start < 1 or end < start or end > total_lines:
         errors.append(
-            f"{origin}: line range {rel_path}:{start}-{end} out of bounds (file has {total_lines} lines)"
+            f"{origin}: line range {norm}:{start}-{end} out of bounds (file has {total_lines} lines)"
         )
+
+
+def extract_line_refs(text: str) -> list[tuple[str, str, str]]:
+    """Extract (path, start, end) references while ignoring URLs."""
+    refs: list[tuple[str, str, str]] = []
+    for m in LINE_REF_RE.finditer(text):
+        prefix = text[max(0, m.start() - 8) : m.start()]
+        if "://" in prefix:
+            continue
+        refs.append((m.group(1), m.group(2), m.group(3)))
+    return refs
 
 
 def count_declared_tests(language: str, test_path: Path) -> int | None:
@@ -165,8 +211,6 @@ def count_declared_tests(language: str, test_path: Path) -> int | None:
 def count_executed_tests(language: str, combined_output: str) -> int | None:
     lang = language.lower()
     if lang == "go":
-        # Completed top-level Go tests always emit "--- PASS/FAIL/SKIP: TestName".
-        # An unrecovered panic aborts the binary before remaining tests run.
         return len(re.findall(r"^--- (?:PASS|FAIL|SKIP): Test\w+ ", combined_output, re.MULTILINE))
     if lang == "python":
         m_unittest = re.search(r"^Ran (\d+) tests? in ", combined_output, re.MULTILINE)
@@ -181,6 +225,39 @@ def count_executed_tests(language: str, combined_output: str) -> int | None:
         return 0
     if lang in ("typescript", "javascript", "ts", "js"):
         m_node = re.search(r"(?:ℹ|#)\s+tests\s+(\d+)", combined_output)
+        if m_node:
+            return int(m_node.group(1))
+        return 0
+    return None
+
+
+def count_passed_tests(language: str, combined_output: str) -> int | None:
+    lang = language.lower()
+    if lang == "go":
+        return len(re.findall(r"^--- PASS: Test\w+ ", combined_output, re.MULTILINE))
+    if lang == "python":
+        m_unittest = re.search(r"^Ran (\d+) tests? in ", combined_output, re.MULTILINE)
+        if m_unittest:
+            ran = int(m_unittest.group(1))
+            m_failed = re.search(r"^FAILED \(([^)]+)\)", combined_output, re.MULTILINE)
+            if not m_failed:
+                m_ok_skip = re.search(r"^OK \(skipped=(\d+)\)", combined_output, re.MULTILINE)
+                skipped = int(m_ok_skip.group(1)) if m_ok_skip else 0
+                return max(0, ran - skipped)
+            non_pass = sum(
+                int(v)
+                for v in re.findall(r"(?:failures|errors|skipped)=(\d+)", m_failed.group(1))
+            )
+            return max(0, ran - non_pass)
+        pytest_passed = re.findall(r"::test_\w+\s+PASSED", combined_output)
+        if pytest_passed:
+            return len(pytest_passed)
+        m_pytest_sum = re.search(r"(\d+)\s+passed", combined_output)
+        if m_pytest_sum:
+            return int(m_pytest_sum.group(1))
+        return 0
+    if lang in ("typescript", "javascript", "ts", "js"):
+        m_node = re.search(r"(?:ℹ|#)\s+pass\s+(\d+)", combined_output)
         if m_node:
             return int(m_node.group(1))
         return 0
@@ -223,7 +300,7 @@ def verify_chapter_files(
             errors.append(f"{ch_id}: source.md missing '## Part 1:' pre-lab section")
         if "## Part 2:" not in source_text:
             errors.append(f"{ch_id}: source.md missing '## Part 2:' post-submit section")
-        refs = LINE_REF_RE.findall(source_text)
+        refs = extract_line_refs(source_text)
         if not refs:
             errors.append(f"{ch_id}: source.md contains no file:start-end line references")
         for rel_path, s_str, e_str in refs:
@@ -283,7 +360,6 @@ def verify_chapter_files(
     test_file = lab.get("test_file", "")
     test_cmd = lab.get("test_command", "")
 
-    # Language-specific runtime hygiene checks (from maintenance-plan-2)
     if lang in ("typescript", "javascript", "ts", "js") and isinstance(test_file, str):
         if JS_TS_HOST_GLOB_RE.search(test_file):
             errors.append(
@@ -312,7 +388,6 @@ def verify_chapter_files(
         if "Part A" not in test_text or "Part B" not in test_text:
             errors.append(f"{ch_id}/{test_file}: expected layered test markers ('Part A' and 'Part B')")
 
-    # Submission archive directory check when attempts >= 1
     if isinstance(prog_entry, dict):
         attempts = prog_entry.get("attempts", 0)
         if isinstance(attempts, int) and attempts >= 1:
@@ -424,7 +499,8 @@ def verify_course(
                     errors,
                 )
             elif isinstance(src_ref, str):
-                if read_source_lines(project_root, src_ref, source_commit) is None:
+                norm = normalize_rel_path(project_root, src_ref)
+                if norm is None or read_source_lines(project_root, norm, source_commit) is None:
                     errors.append(f"course.json[{ch_id}]: source file does not exist: {src_ref}")
 
     for ch_id, prereqs in prereqs_map.items():
@@ -485,7 +561,6 @@ def verify_course(
             if score != 0:
                 errors.append(f"progress.json[{ch_id}] not_started chapter must have score == 0, got {score}")
 
-    # Validate generated chapters
     for ch in chapters:
         ch_id = ch.get("id", "")
         if chapter_filter and ch_id != chapter_filter:
@@ -515,6 +590,9 @@ def run_gate(project_root: Path, chapter_id: str, mode: str) -> tuple[bool, str]
         return False, f"{chapter_id}: missing test_file {test_file}"
 
     declared = count_declared_tests(language, test_path)
+    if declared is not None and declared == 0:
+        return False, f"{chapter_id}: no test cases declared in {test_file}"
+
     rel_ch_dir = f".promentor/chapters/{chapter_id}"
     cmd = test_cmd.replace("{chapter_dir}", rel_ch_dir)
     proc = subprocess.run(
@@ -531,27 +609,34 @@ def run_gate(project_root: Path, chapter_id: str, mode: str) -> tuple[bool, str]
     if mode == "red":
         if proc.returncode == 0:
             return False, f"{chapter_id}: expected Red State (non-zero exit), but test_command passed"
-        for bad in INFRA_ERROR_SIGNATURES:
-            if bad in combined:
-                return False, f"{chapter_id}: test_command failed with infra/build error ({bad}):\n{combined}"
+        for hard in HARD_BUILD_ERROR_SIGNATURES:
+            if hard in combined:
+                return False, f"{chapter_id}: test_command failed with infra/build error ({hard}):\n{combined}"
+
+        if declared is not None and executed is not None:
+            if executed != declared:
+                for bad in INFRA_ERROR_SIGNATURES:
+                    if bad in combined:
+                        return False, f"{chapter_id}: test_command failed with infra/build error ({bad}):\n{combined}"
+                return (
+                    False,
+                    f"{chapter_id}: executed {executed}/{declared} tests (aborted early by unrecovered panic/exit?):\n{combined}",
+                )
+        else:
+            for bad in INFRA_ERROR_SIGNATURES:
+                if bad in combined:
+                    return False, f"{chapter_id}: test_command failed with infra/build error ({bad}):\n{combined}"
+
         if not any(sig in combined for sig in EXPECTED_RED_SIGNATURES):
             return False, f"{chapter_id}: test_command exited non-zero without clear test failure signal:\n{combined}"
-        if declared is not None and declared > 0 and executed is not None and executed != declared:
-            return (
-                False,
-                f"{chapter_id}: executed {executed}/{declared} tests (aborted early by unrecovered panic/exit?):\n{combined}",
-            )
         count_info = f"{executed}/{declared} tests executed" if declared is not None else "tests executed"
         return True, f"PASS: {chapter_id} red gate ({count_info})"
 
     if mode == "green":
         if proc.returncode != 0:
             return False, f"{chapter_id}: expected Green State (exit 0), got {proc.returncode}:\n{combined}"
-        if declared is not None and declared > 0 and executed is not None and executed != declared:
-            return (
-                False,
-                f"{chapter_id}: green gate ran {executed}/{declared} tests:\n{combined}",
-            )
+        if declared is not None and executed is not None and executed != declared:
+            return False, f"{chapter_id}: green gate ran {executed}/{declared} tests:\n{combined}"
         count_info = f"{executed}/{declared} tests passed" if declared is not None else "all tests passed"
         return True, f"PASS: {chapter_id} green gate ({count_info})"
 
@@ -595,6 +680,86 @@ def cmd_gate(project_root: Path, mode: str, chapter_id: str) -> int:
     return 0 if ok else 1
 
 
+def cmd_test(project_root: Path, chapter_id: str | None) -> int:
+    prom_dir = project_root / ".promentor"
+    errors: list[str] = []
+    progress_path = prom_dir / "progress.json"
+    progress = load_json(progress_path, errors)
+    if progress is None:
+        print("\n".join(errors), file=sys.stderr)
+        return 1
+
+    target_ch = chapter_id or progress.get("current_chapter")
+    if not isinstance(target_ch, str) or not target_ch:
+        print("ERROR: no chapter specified and progress.json current_chapter is empty", file=sys.stderr)
+        return 1
+
+    ch_dir = prom_dir / "chapters" / target_ch
+    lab = load_json(ch_dir / "lab.json", errors)
+    if lab is None:
+        print("\n".join(errors), file=sys.stderr)
+        return 1
+
+    test_file = lab.get("test_file", "")
+    test_cmd = lab.get("test_command", "")
+    language = str(lab.get("language", ""))
+    expected_checksum = lab.get("test_checksum", "")
+    test_path = ch_dir / test_file if isinstance(test_file, str) and test_file else None
+    if test_path is None or not test_path.is_file() or not isinstance(test_cmd, str):
+        print(f"ERROR: {target_ch} missing test_file or test_command", file=sys.stderr)
+        return 1
+
+    actual_checksum = sha256_file(test_path)
+    if actual_checksum != expected_checksum:
+        print(
+            f"WARNING: test_file checksum mismatch for {target_ch} (expected {expected_checksum}, got {actual_checksum}); /promentor submit will be rejected until restored"
+        )
+
+    rel_ch_dir = f".promentor/chapters/{target_ch}"
+    cmd = test_cmd.replace("{chapter_dir}", rel_ch_dir)
+    proc = subprocess.run(
+        cmd,
+        cwd=project_root,
+        shell=True,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.stdout:
+        print(proc.stdout, end="" if proc.stdout.endswith("\n") else "\n")
+    if proc.stderr:
+        print(proc.stderr, end="" if proc.stderr.endswith("\n") else "\n", file=sys.stderr)
+
+    combined = f"{proc.stdout}\n{proc.stderr}"
+    declared = count_declared_tests(language, test_path)
+    executed = count_executed_tests(language, combined)
+    passed = count_passed_tests(language, combined)
+
+    total = max(declared or 0, executed or 0)
+    passed_val = passed if passed is not None else 0
+
+    chapters_prog = progress.get("chapters")
+    ch_prog = chapters_prog.get(target_ch) if isinstance(chapters_prog, dict) else None
+    status = ch_prog.get("status", "unknown") if isinstance(ch_prog, dict) else "unknown"
+    score = ch_prog.get("score", 0) if isinstance(ch_prog, dict) else 0
+
+    all_passed = proc.returncode == 0 and total > 0 and passed_val == total
+    if isinstance(ch_prog, dict) and status == "in_progress" and total > 0:
+        if all_passed:
+            # Keep status in_progress and score < 100 until formal /promentor submit.
+            ch_prog["score"] = 99
+            score = 99
+        else:
+            score = min((passed_val * 100) // total, 99)
+            ch_prog["score"] = score
+        progress_path.write_text(json.dumps(progress, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    if all_passed and status == "in_progress":
+        print(f"ALL_PASSED (100% ready to submit): run /promentor submit to archive {target_ch} and lock 100%")
+    print(f"SUMMARY: {target_ch} passed={passed_val}/{total} score={score} status={status}")
+    return 0 if proc.returncode == 0 else 1
+
+
 def cmd_archive(project_root: Path, chapter_id: str) -> int:
     prom_dir = project_root / ".promentor"
     ch_dir = prom_dir / "chapters" / chapter_id
@@ -617,6 +782,12 @@ def cmd_archive(project_root: Path, chapter_id: str) -> int:
             f"ERROR: {chapter_id} test_checksum mismatch (expected {expected_checksum}, got {actual_checksum}); aborting archive",
             file=sys.stderr,
         )
+        return 1
+
+    # Built-in green gate: archive MUST reject failing/incomplete implementations atomically.
+    green_ok, green_msg = run_gate(project_root, chapter_id, "green")
+    if not green_ok:
+        print(f"ERROR: {chapter_id} green gate failed; aborting archive\n{green_msg}", file=sys.stderr)
         return 1
 
     chapters_prog = progress.get("chapters")
@@ -668,6 +839,10 @@ def cmd_resume_scan(project_root: Path) -> int:
         print("\n".join(errors), file=sys.stderr)
         return 1
 
+    progress_errors: list[str] = []
+    progress = load_json(prom_dir / "progress.json", progress_errors) if (prom_dir / "progress.json").is_file() else None
+    prog_chapters = progress.get("chapters", {}) if isinstance(progress, dict) and isinstance(progress.get("chapters"), dict) else {}
+
     chapters = course.get("chapters", [])
     gen_mode = course.get("generation_mode", "lazy")
     source_commit = course.get("source_commit", "") if isinstance(course.get("source_commit"), str) else ""
@@ -681,22 +856,35 @@ def cmd_resume_scan(project_root: Path) -> int:
         if gen_mode == "all" or idx == 0 or ch.get("generation_status") in ("in_progress", "generated") or ch_dir_exists:
             targets.append(ch)
 
-    incomplete: list[tuple[str, list[str]]] = []
+    incomplete: list[tuple[str, list[str], bool]] = []
     for ch in targets:
         ch_id = ch["id"]
+        prog_entry = prog_chapters.get(ch_id, {}) if isinstance(prog_chapters.get(ch_id), dict) else {}
         ch_errors: list[str] = []
         if ch.get("generation_status") != "generated":
             ch_errors.append(f"generation_status is {ch.get('generation_status')!r}")
-        ch_errors.extend(verify_chapter_files(project_root, ch_id, source_commit))
+        ch_errors.extend(verify_chapter_files(project_root, ch_id, source_commit, prog_entry))
         if ch_errors:
-            incomplete.append((ch_id, ch_errors))
+            sub_dir = prom_dir / "submissions" / ch_id
+            has_submissions = sub_dir.is_dir() and any(sub_dir.iterdir())
+            is_protected = (
+                prog_entry.get("status") in ("in_progress", "completed")
+                or (isinstance(prog_entry.get("attempts"), int) and prog_entry.get("attempts", 0) >= 1)
+                or has_submissions
+            )
+            incomplete.append((ch_id, ch_errors, is_protected))
 
     if not incomplete:
         print("OK: all target chapters complete")
         return 0
 
-    for ch_id, reasons in incomplete:
-        print(f"REGENERATE {ch_id}: {reasons[0]}")
+    for ch_id, reasons, is_protected in incomplete:
+        if is_protected:
+            print(
+                f"PROTECTED {ch_id}: {reasons[0]} (student work in progress/completed; do not overwrite implementation files)"
+            )
+        else:
+            print(f"REGENERATE {ch_id}: {reasons[0]}")
     return 0
 
 
@@ -732,7 +920,7 @@ def cmd_exclude(project_root: Path) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="promentor.py",
-        description="Deterministic verification, gating, archival, and exclude helper for ProMentor.",
+        description="Deterministic verification, testing, gating, archival, and exclude helper for ProMentor.",
     )
     parser.add_argument("--root", type=Path, default=Path("."), help="Target project root directory (default: .)")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -748,7 +936,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate.add_argument("mode", choices=("red", "green"), help="Expected gate state")
     p_gate.add_argument("chapter", help="Chapter ID")
 
-    p_archive = sub.add_parser("archive", help="Verify checksum, archive files to attempt_N/, update progress.json")
+    p_test = sub.add_parser("test", help="Run chapter tests, check tamper warning, and update progress score")
+    p_test.add_argument("chapter", nargs="?", default=None, help="Optional chapter ID (defaults to current_chapter)")
+
+    p_archive = sub.add_parser("archive", help="Verify checksum + green gate, archive files to attempt_N/, update progress.json")
     p_archive.add_argument("chapter", help="Chapter ID")
 
     sub.add_parser("resume-scan", help="List missing or incomplete chapters needing regeneration")
@@ -768,6 +959,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_verify(root, args.chapter, args.strict_commit)
     if args.command == "gate":
         return cmd_gate(root, args.mode, args.chapter)
+    if args.command == "test":
+        return cmd_test(root, args.chapter)
     if args.command == "archive":
         return cmd_archive(root, args.chapter)
     if args.command == "resume-scan":

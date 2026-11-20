@@ -210,6 +210,190 @@ class TestValidateCourseNegativeCases(unittest.TestCase):
             errors = validate_course(work, mode="red", skip_tests=True)
             self.assertTrue(any("missing submission directory" in e for e in errors), errors)
 
+    def test_archive_rejects_red_state_atomically(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            work = self._setup_fixture(FIXTURE_PY, Path(td))
+            proc = subprocess.run(
+                [sys.executable, str(PROMENTOR_CLI), "--root", str(work), "archive", "ch01-kv-ttl"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("green gate failed", proc.stderr)
+            self.assertFalse((work / ".promentor" / "submissions" / "ch01-kv-ttl" / "attempt_1").exists())
+            prog = json.loads((work / ".promentor" / "progress.json").read_text(encoding="utf-8"))
+            self.assertEqual(prog["chapters"]["ch01-kv-ttl"]["status"], "in_progress")
+            self.assertEqual(prog["chapters"]["ch01-kv-ttl"]["attempts"], 0)
+            self.assertEqual(prog["chapters"]["ch01-kv-ttl"]["score"], 0)
+
+    def test_resume_scan_protects_in_progress_chapter(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            work = self._setup_fixture(FIXTURE_GO, Path(td))
+            ch_dir = work / ".promentor" / "chapters" / "ch01-router"
+            # Corrupt lecture.md while chapter is in_progress
+            (ch_dir / "lecture.md").write_text("", encoding="utf-8")
+            proc = subprocess.run(
+                [sys.executable, str(PROMENTOR_CLI), "--root", str(work), "resume-scan"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertIn("PROTECTED ch01-router:", proc.stdout)
+            self.assertNotIn("REGENERATE ch01-router:", proc.stdout)
+
+            # When chapter has not_started & 0 attempts, corruption should emit REGENERATE
+            prog_path = work / ".promentor" / "progress.json"
+            prog = json.loads(prog_path.read_text(encoding="utf-8"))
+            prog["chapters"]["ch01-router"]["status"] = "not_started"
+            prog_path.write_text(json.dumps(prog, indent=2), encoding="utf-8")
+            proc2 = subprocess.run(
+                [sys.executable, str(PROMENTOR_CLI), "--root", str(work), "resume-scan"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertIn("REGENERATE ch01-router:", proc2.stdout)
+
+    def test_gate_red_allows_syntax_error_in_test_assertion_when_all_tests_ran(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            work = self._setup_fixture(FIXTURE_TS, Path(td))
+            ch_dir = work / ".promentor" / "chapters" / "ch01-event-bus"
+            test_path = ch_dir / "lab_test.ts"
+            test_path.write_text(
+                'import assert from "node:assert/strict";\n'
+                'import test from "node:test";\n'
+                'import { matchTopic } from "./event_bus.ts";\n'
+                '// Part A\n'
+                'test("Part A: empty input throws SyntaxError", () => {\n'
+                '  assert.throws(() => matchTopic("", "a"), SyntaxError);\n'
+                '});\n'
+                '// Part B\n'
+                'test("Part B: missing file reports No such file or directory", () => {\n'
+                '  assert.equal(matchTopic("a.*", "a.b"), true);\n'
+                '});\n',
+                encoding="utf-8",
+            )
+            subprocess.run(
+                [sys.executable, str(PROMENTOR_CLI), "--root", str(work), "checksum", "ch01-event-bus"],
+                check=True,
+                capture_output=True,
+            )
+            proc = subprocess.run(
+                [sys.executable, str(PROMENTOR_CLI), "--root", str(work), "gate", "red", "ch01-event-bus"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("2/2 tests executed", proc.stdout)
+
+    def test_gate_rejects_zero_declared_tests(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            work = self._setup_fixture(FIXTURE_PY, Path(td))
+            ch_dir = work / ".promentor" / "chapters" / "ch01-kv-ttl"
+            (ch_dir / "test_lab.py").write_text(
+                "# Part A\n# Part B\nimport unittest\nif __name__ == '__main__':\n    unittest.main()\n",
+                encoding="utf-8",
+            )
+            for mode in ("red", "green"):
+                proc = subprocess.run(
+                    [sys.executable, str(PROMENTOR_CLI), "--root", str(work), "gate", mode, "ch01-kv-ttl"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(proc.returncode, 0, f"mode={mode}: {proc.stdout}")
+                self.assertIn("no test cases declared", proc.stdout)
+
+    def test_line_ref_dynamic_routes_dot_slash_and_ignores_ip_ports(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            work = self._setup_fixture(FIXTURE_GO, Path(td))
+            dyn_file = work / "app" / "users" / "[id]" / "route.ts"
+            dyn_file.parent.mkdir(parents=True, exist_ok=True)
+            dyn_file.write_text("line1\nline2\nline3\nline4\nline5\nline6\n", encoding="utf-8")
+
+            src_md = work / ".promentor" / "chapters" / "ch01-router" / "source.md"
+            src_md.write_text(
+                "# 源码导读\n\n"
+                "## Part 1: 写前导读\n"
+                "动态路由：`app/users/[id]/route.ts:1-5`\n"
+                "相对前缀：`./router.go:1-5`\n"
+                "默认监听 `127.0.0.1:8000-8080` 端口范围，不应误判为源文件。\n\n"
+                "## Part 2: 提交后深读\n"
+                "核心：`router.go:10-20`\n",
+                encoding="utf-8",
+            )
+            errors = validate_course(work, mode="red", skip_tests=True)
+            self.assertEqual(errors, [])
+
+    def test_cli_test_subcommand_partial_all_passed_and_completed_preservation(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            work = self._setup_fixture(FIXTURE_PY, Path(td))
+            ch_dir = work / ".promentor" / "chapters" / "ch01-kv-ttl"
+
+            # 1. Partial pass: implement only ttl.py (1/5 passes -> score 20, status stays in_progress)
+            shutil.copy2(FIXTURE_PY / "solutions" / "attempt_1" / "ttl.py", ch_dir / "ttl.py")
+            p_partial = subprocess.run(
+                [sys.executable, str(PROMENTOR_CLI), "--root", str(work), "test"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(p_partial.returncode, 0)
+            self.assertIn("SUMMARY: ch01-kv-ttl passed=1/5 score=20 status=in_progress", p_partial.stdout)
+            prog = json.loads((work / ".promentor" / "progress.json").read_text(encoding="utf-8"))
+            self.assertEqual(prog["chapters"]["ch01-kv-ttl"]["score"], 20)
+            self.assertEqual(prog["chapters"]["ch01-kv-ttl"]["status"], "in_progress")
+
+            # 2. Tamper warning check
+            test_path = ch_dir / "test_lab.py"
+            orig_bytes = test_path.read_bytes()
+            try:
+                test_path.write_bytes(orig_bytes + b"\n# tamper\n")
+                p_tamper = subprocess.run(
+                    [sys.executable, str(PROMENTOR_CLI), "--root", str(work), "test", "ch01-kv-ttl"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertIn("WARNING: test_file checksum mismatch", p_tamper.stdout)
+            finally:
+                test_path.write_bytes(orig_bytes)
+
+            # 3. Full pass before submit: exit 0, ALL_PASSED, does NOT auto-mark completed
+            shutil.copy2(FIXTURE_PY / "solutions" / "attempt_1" / "store.py", ch_dir / "store.py")
+            p_all = subprocess.run(
+                [sys.executable, str(PROMENTOR_CLI), "--root", str(work), "test"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(p_all.returncode, 0, p_all.stdout + p_all.stderr)
+            self.assertIn("ALL_PASSED", p_all.stdout)
+            self.assertIn("SUMMARY: ch01-kv-ttl passed=5/5 score=99 status=in_progress", p_all.stdout)
+            prog = json.loads((work / ".promentor" / "progress.json").read_text(encoding="utf-8"))
+            self.assertEqual(prog["chapters"]["ch01-kv-ttl"]["status"], "in_progress")
+            self.assertEqual(prog["chapters"]["ch01-kv-ttl"]["score"], 99)
+
+            # 4. After archive locks completed=100, failing tests during refactor must NOT downgrade progress
+            subprocess.run(
+                [sys.executable, str(PROMENTOR_CLI), "--root", str(work), "archive", "ch01-kv-ttl"],
+                check=True,
+                capture_output=True,
+            )
+            shutil.copy2(FIXTURE_PY / "course_fixture" / "chapters" / "ch01-kv-ttl" / "store.py", ch_dir / "store.py")
+            p_refactor = subprocess.run(
+                [sys.executable, str(PROMENTOR_CLI), "--root", str(work), "test"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(p_refactor.returncode, 0)
+            prog = json.loads((work / ".promentor" / "progress.json").read_text(encoding="utf-8"))
+            self.assertEqual(prog["chapters"]["ch01-kv-ttl"]["status"], "completed")
+            self.assertEqual(prog["chapters"]["ch01-kv-ttl"]["score"], 100)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -74,7 +74,10 @@ ProMentor 课程大纲：《{项目名} 内部设计》
    - `lab.json` 中 `files` 与 `starter_files` 声明的全部骨架文件存在；
    - `lab.json` 中 `test_file` 存在且与 `test_checksum` 一致；
    - （若为 Final 章）课程根目录可运行入口存在。
-4. 任意一项缺失或残缺时，**完整重新生成该章**并通过 `gate red` + `checksum` + `verify`；已完整通过校验的章节直接跳过，不重复生成。
+4. 处理 `resume-scan` 结果：
+   - 标记为 `REGENERATE {ch_id}`（未进入学习且文件缺失/残缺）：**完整重新生成该章**并通过 `gate red` + `checksum` + `verify`；
+   - 标记为 `PROTECTED {ch_id}`（学生已处于 `in_progress` / `completed` 或已有提交）：**严禁覆盖 `lab.json` 中 `files` 声明的学生实现文件**，仅修复非代码元数据或向用户说明异常并请求确认；
+   - 已完整通过校验的章节直接跳过，不重复生成。
 
 ---
 
@@ -106,8 +109,8 @@ ProMentor: {project} ({language} · {mode})
 2. **检查 Commit 锚定**：执行 §8.1 检查；如 HEAD 已更新，附带简明提示。
 3. **检查前置依赖**：若 `prerequisites` 中存在未完成章节，礼貌提醒但允许继续。
 4. **按需生成（Lazy Generation）**：
-   - 检查该章 `generation_status` 及文件完整性（优先调用 `promentor.py verify {chapter_id}`，无 Python 3 时按 §1.2 清单核验）。
-   - 若尚未生成或残缺：先加载 `references/generation.md` 与 `references/languages.md`，通过 `git show {source_commit}:{path}` 读取原始源码并结合前置章节学生实现，生成本章完整产物后执行 `promentor.py gate red {chapter_id}` → `checksum` → `verify`，再将 `course.json` 标记为 `"generated"`。
+   - **仅当该章 `generation_status == "pending"`（或章节目录尚未创建）时**才触发按需生成：先加载 `references/generation.md` 与 `references/languages.md`，通过 `git show {source_commit}:{path}` 读取原始源码并结合前置章节学生实现，生成本章完整产物后执行 `promentor.py gate red {chapter_id}` → `checksum` → `verify`，再将 `course.json` 标记为 `"generated"`。
+   - 若章节已生成（尤其 `progress.json` 中 `status` 已为 `in_progress` / `completed`），**严禁重生成章节或覆盖 `lab.json` 中 `files` 声明的学生实现文件**；若需排查元数据损坏，仅做只读校验并提示用户。
 5. **展开教学**（结合 `references/teaching.md` §3）：
    - **概念引入**：1–2 句话点明本章在系统中的定位与核心矛盾。
    - **讲义讲解**：基于 `lecture.md` 对话式讲解概念、设计权衡与 Mermaid 图表（`challenge` 模式下严禁剧透实现代码）。
@@ -127,11 +130,13 @@ ProMentor: {project} ({language} · {mode})
 
 ## 4. `/promentor test`
 
-1. 读取 `progress.json` 的 `current_chapter`（为空时询问测试哪一章）。
-2. 读取该章 `lab.json`：
-   - 可顺带检查 `test_file` 的 SHA-256（§8.2）；若发现被篡改，立即给出警告并说明提交会被拒绝。
-   - 在项目根目录执行 `test_command`（替换 `{chapter_dir}`），捕获完整输出。
-3. **按分层解析并展示结果**（通过与失败用例均展示，每个失败用例说明“期望 vs 实际”）：
+1. **执行测试与进度更新**：
+   - 优先调用内置脚本（未指定章节时自动读取 `progress.json` 的 `current_chapter`，同步完成 `test_checksum` 防篡改警告、命令执行、通过数解析与 `progress.json` 分数更新）：
+     ```bash
+     python3 <skill_dir>/scripts/promentor.py test [chapter_id]
+     ```
+   - 若无 Python 3，按手工回退：读取 `progress.json` 的 `current_chapter` 与该章 `lab.json`，核验 `test_file` SHA-256（§8.2）并在项目根目录执行 `test_command`（替换 `{chapter_dir}`），若章节为 `in_progress` 则更新 `score = min(floor(passed / total * 100), 99)`（不提前改为 `completed`；已完成章节不倒退）。
+2. **按分层解析并展示结果**（通过与失败用例均展示，每个失败用例说明“期望 vs 实际”）：
 
 ```text
 3/5 通过（60%）
@@ -150,9 +155,7 @@ Part C · 优先级与扩展
 基础路由和常规边界已通过，参数提取与优先级仍待完善。需要提示直接说“给点提示”或运行 /promentor hint。
 ```
 
-4. **更新进度**：
-   - 若章节为 `in_progress` 且 `passed < total`：更新 `score = floor(passed / total * 100)`（上限 99）。
-   - 若 `passed == total`：提示全部通过，引导运行 `/promentor submit` 正式归档与锁定成绩（不直接改为 `completed`）。
+3. 若脚本输出 `ALL_PASSED`，提示全部通过并引导运行 `/promentor submit` 正式归档与锁定 100%；若输出 `WARNING: test_file checksum mismatch`，立即提醒学生还原测试文件。
 
 ---
 
@@ -171,13 +174,12 @@ Part C · 优先级与扩展
 ## 6. `/promentor submit`
 
 1. 确定当前章节，读取 `lab.json`。
-2. **绿态门禁与目录制归档**：
-   - 优先调用内置脚本完成测试全通过核验、防篡改校验、目录归档与进度更新：
+2. **原子化提交（校验 + 绿态门禁 + 归档）**：
+   - 优先调用内置脚本单条原子命令（内部依次完成 `test_checksum` 防篡改校验、`gate green` 全量跑通核验、`attempt_{N}/` 目录复制与 `progress.json` 锁定 100%）：
      ```bash
-     python3 <skill_dir>/scripts/promentor.py gate green {chapter_id}
      python3 <skill_dir>/scripts/promentor.py archive {chapter_id}
      ```
-   - 若测试失败或 `test_checksum` 不一致，**拒绝提交**并展示原因；无 Python 3 时按以下手工步骤回退：
+   - 任意环节失败时脚本返回非零码且不创建归档或修改进度，**拒绝提交**并展示原因；无 Python 3 时按以下手工步骤回退：
      1. 核验 `test_file` 的 SHA-256 与 `lab.json` 的 `test_checksum` 一致（§8.2）；
      2. 执行 `test_command` 确认全部用例执行且通过；
      3. 计算 `N = progress.chapters[id].attempts + 1`，创建 `.promentor/submissions/{chapter_id}/attempt_{N}/` 并完整复制 `lab.json` 的 `files[].path`；
