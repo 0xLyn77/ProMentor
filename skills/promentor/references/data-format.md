@@ -17,7 +17,7 @@
 
 ## 1.1 目录结构
 
-所有课程数据以纯文本存储于目标项目根目录的 `.promentor/` 下，人类可读、易于 diff，并自动加入目标项目 `.gitignore`：
+所有课程数据以纯文本存储于目标项目根目录的 `.promentor/` 下，人类可读、易于 diff；在 Git 仓库内通过 `.git/info/exclude` 忽略（不修改目标仓库已跟踪的 `.gitignore`；仅非 Git 目录回退写入 `.gitignore`）：
 
 ```text
 .promentor/
@@ -271,7 +271,7 @@
 | `package` | `string` | 是 | 包名 / 模块名 / 命名空间 |
 | `files` | `Array<{path, description}>` | 是 | 学生需实现的文件清单（相对 `{chapter_dir}`）。`init` 按此生成骨架，`submit` 按此完整复制到 `attempt_{N}/` |
 | `starter_files` | `string[]` | 推荐 | 章节生成时创建的全部骨架与脚手架文件清单（至少包含 `files[].path`，若包含独立 `Cargo.toml`、`package.json` 等一并列出），供 `--resume` 完整性校验 |
-| `test_file` | `string` | 是 | 行为测试文件相对路径（如 `lab_test.go`、`test_lab.py`、`lab.test.ts`） |
+| `test_file` | `string` | 是 | 行为测试文件相对路径（如 `lab_test.go`、`test_lab.py`、`lab_test.ts`；TS/JS 禁止 `*.test.*` / `*.spec.*`） |
 | `test_checksum` | `string` | 是 | `test_file` 的 SHA-256 校验和，格式 `sha256:<64位小写十六进制>`；在生成期 Red-State 自检通过后写入，`submit` 前必须核验 |
 | `interface.types` | `Array<{name, kind, doc}>` | 是 | 需导出的核心类型清单（无独立类型时可为空数组 `[]`） |
 | `interface.functions` | `Array<{signature, doc}>` | 是 | 学生必须严格遵循的函数/方法签名清单 |

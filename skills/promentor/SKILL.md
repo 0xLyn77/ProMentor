@@ -58,7 +58,7 @@ description: 把任意开源项目转成 MIT 风格的动手工程课程：按�
 
 ## 4. `.promentor/` 状态文件速查
 
-课程数据全部保存在目标项目根目录 `.promentor/`（`init` 自动追加到 `.gitignore`）：
+课程数据全部保存在目标项目根目录 `.promentor/`（Git 仓库内通过 `.git/info/exclude` 忽略，不改动目标仓库已跟踪的 `.gitignore`）：
 
 ```text
 .promentor/
@@ -85,15 +85,16 @@ description: 把任意开源项目转成 MIT 风格的动手工程课程：按�
 1. **统一键名**：`course.json` 与 `progress.json` 均使用 `project`（不使用 `project_name`）。
 2. **统一评分**：`in_progress` 时 `score = floor(passed / total * 100)`（上限 `99`）；仅全量通过且 `submit` 后 `status = "completed"`、`score = 100`；`hint_level_reached` 独立记录不扣分；总进度 = `round(completed / total_chapters * 100)%`。
 3. **落盘顺序**：确认大纲后**立刻写入** `course.json` 与 `progress.json`，再生成章节，保障 `--resume` 始终可用。
-4. **Red-State 门禁**：每章生成骨架与测试后，必须实跑 `test_command` 确认可编译/加载且按预期失败，再写入 `test_checksum` 并标记 `generation_status: "generated"`。
-5. **Commit 锚定**：`learn` / `review` 时比对 `git rev-parse HEAD` 与 `source_commit`，源码变动时主动提示行号可能偏移。
+4. **Red-State 门禁**：每章生成骨架与测试后，必须实跑 `test_command` 确认可编译/加载、实际执行测试数等于声明数且按预期失败，再写入 `test_checksum` 并标记 `generation_status: "generated"`。
+5. **Commit 锚定**：源码读取统一锚定到 `source_commit`（`git show {source_commit}:{path}`），`learn` / `review` 时若 HEAD 变更仅做简明提示。
 
 ---
 
-## 5. 参考文档索引（渐进式披露）
+## 5. 参考文档与内置脚本索引（渐进式披露）
 
 按当前任务只加载需要的文档，避免无关上下文稀释注意力：
 
+- `scripts/promentor.py` — 确定性辅助脚本（Python ≥ 3.9，零依赖）：`checksum` / `verify` / `gate red|green` / `archive` / `resume-scan` / `exclude`。
 - `references/commands.md` — 全部子命令完整执行步骤、输出模板、`--resume` 校验清单、Commit 锚定与防篡改校验。
 - `references/data-format.md` — `course.json` / `progress.json` / `lab.json` 完整 JSON Schema、章节 ID 与简写匹配、文档格式规范。
 - `references/generation.md` — 四轮扫描、大项目裁剪、`--focus`、按需生成、Starter Stub、分层测试（Part A/B/C）、Red-State 自检、Mermaid 与跨章解耦。

@@ -14,10 +14,10 @@ python3 evals/run_smoke.py
 
 | 文件 | 用途 |
 | --- | --- |
-| `validate_skill.py` | 校验 `SKILL.md` 篇幅（渐进式披露 ≤ 220 行）、frontmatter、内部参考文档引用、`agents/openai.yaml`、`README.md` 仓库地址、`.gitignore` 与无旧架构残留 |
-| `validate_course.py` | 对任意目标项目生成的 `.promentor/` 执行确定性检查：JSON Schema、统一评分不变量、行号真实性（`file:start-end`）、`source.md` 两阶段分区、Mermaid 图表、测试文件 SHA-256 防篡改、目录制提交归档，以及实跑 `test_command` 验证 Red / Green State |
-| `test_validators.py` | 校验器自身的反向用例单测（验证越界行号、遗留 `project_name`、评分冲突、缺失防剧透分区/Mermaid、语法构建失败、循环依赖、旧单文件归档均会被精准拦截） |
-| `run_smoke.py` | 在隔离临时目录中对 3 个基准项目执行完整闭环：`Red State` → `测试篡改拦截` → `Attempt 1 Green + 归档 + Review 落盘` → `Attempt 2 重构 + 增量 Review` → `source_commit 偏移检测` |
+| `validate_skill.py` | 校验 `SKILL.md` 篇幅（渐进式披露 ≤ 220 行）、frontmatter、内部参考文档与 `scripts/promentor.py` 可用性、`agents/openai.yaml`、`README.md` 仓库地址、`.gitignore` 与无旧架构残留 |
+| `validate_course.py` | 复用 `skills/promentor/scripts/promentor.py` 执行确定性检查：JSON Schema、统一评分、锚定 `source_commit` 的行号真实性、`source.md` 两阶段分区、Mermaid、SHA-256 防篡改、TS/Python 运行时卫生、目录制归档，以及 Red/Green 门禁与执行数核对 |
+| `test_validators.py` | 校验器反向用例单测（Go panic 中断、TS 命名污染宿主测试、Python `cd` + 相对 venv、`.git/info/exclude` 保护 `.gitignore`、锚定 `source_commit` 抗行号漂移、越界行号、评分冲突等） |
+| `run_smoke.py` | 直接调用 `skills/promentor/scripts/promentor.py` 对 3 个基准项目执行完整闭环：`exclude`（`.gitignore` 不变脏）→ `Red State`（全量测试数）→ `篡改拦截` → `Attempt 1/2 archive` → `Commit Drift 锚定校验` |
 | `prompt_cases.json` | 防代写护栏、防剧透、Level 1–3 分层提示、测试防篡改、五维 Review 与二次重构增量 Review 的行为抽测用例集（可用于人工抽测或 LLM-as-judge 回归） |
 
 ## 校验任意真实项目课程

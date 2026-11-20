@@ -70,7 +70,7 @@ cp -r ProMentor/skills/promentor ~/.agents/skills/promentor    # 通用 Agent �
 
 ## 生成的课程目录
 
-运行 `/promentor init` 后，课程内容统一存放在目标项目根目录的 `.promentor/` 中（并自动追加到 `.gitignore`）：
+运行 `/promentor init` 后，课程内容统一存放在目标项目根目录的 `.promentor/` 中（Git 仓库内自动写入 `.git/info/exclude`，不修改目标仓库的 `.gitignore`）：
 
 ```text
 .promentor/

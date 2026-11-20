@@ -55,7 +55,7 @@
       }
     ]
   },
-  "test_command": "cd {chapter_dir} && python3 -m unittest -v test_lab.py",
+  "test_command": "python3 {chapter_dir}/test_lab.py -v",
   "notes": [
     "WAL 持久化将在 ch02-wal 实现，本章仅维护内存状态。",
     "扩展挑战：首次 Review 后将双字典存储重构为单表元组结构以减少重复哈希查找。"

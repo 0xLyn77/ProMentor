@@ -79,8 +79,9 @@
 为降低长上下文退化、避免行号幻觉并让用户快速开练，严格遵循以下落盘顺序：
 
 1. **大纲确认后立即落盘元数据**：
-   - 用户确认大纲（及 `mode`: 默认 `challenge` 或 `guided`）后，**立刻写入** `.promentor/course.json`（所有章初始 `generation_status: "pending"`）与 `.promentor/progress.json`（所有章初始 `status: "not_started"`），并追加 `.promentor/` 到目标项目 `.gitignore`。
-   - 这样即使在生成任一章节中途断线，`/promentor init --resume` 也能可靠恢复！
+   - 用户确认大纲（及 `mode`: 默认 `challenge` 或 `guided`）后，**立刻写入** `.promentor/course.json`（所有章初始 `generation_status: "pending"`）与 `.promentor/progress.json`（所有章初始 `status: "not_started"`）。
+   - 执行 `python3 <skill_dir>/scripts/promentor.py exclude` 将 `.promentor/` 写入 `.git/info/exclude`（不修改目标仓库已跟踪的 `.gitignore`；仅非 Git 目录回退写入 `.gitignore`）。
+   - 这样即使在生成任一章节中途断线，`/promentor init --resume` 也能可靠恢复，且保持目标仓库 `git status` 干净！
 2. **默认仅生成首章（`generation_mode: "lazy"`）**：
    - 默认 `/promentor init` 只生成大纲中的**第 1 章**（通过 Red-State 自检后将 `course.json` 该章更新为 `generation_status: "generated"`），随后提示用户直接 `/promentor learn <ch1>` 开学。
    - 若用户明确指定 `/promentor init --all`，则设置 `generation_mode: "all"`，按顺序逐章生成并每章完成自检后即时更新 `course.json`。
@@ -104,10 +105,11 @@
   - 节点标签含括号/特殊字符时用双引号包裹（如 `A["Router (Radix Tree)"]`），不使用 HTML 标签。
 
 ### 2. `source.md`（两阶段源码导读）
+- **源码锚定读取**：若 `course.json` 的 `source_commit` 非空，生成 `lecture.md` 与 `source.md` 时一律通过 `git show {source_commit}:{path}` 读取原始源码（`source_commit` 为空时读工作区文件），确保行号永久锚定到初始化版本。
 - 严格拆分为两个顶级分区（完整模板见 `references/data-format.md` §1.7）：
   - `## Part 1: 写前导读（Pre-Lab · 契约与边界）`：模块定位、Mermaid 交互图、外部接口签名与调用入口；隐藏内部核心算法细节。
   - `## Part 2: 提交后深读（Post-Submit · 核心实现剖析）`：在 `/promentor review` 解锁，逐段标注核心数据结构、关键算法与边界处理的精确行号及“为什么”。
-- **行号核对**：写入前必须通过读取原文件核对实际行号，确保每处 `path/to/file:start-end` 真实存在且未越界。
+- **行号核对**：写入后优先运行 `python3 <skill_dir>/scripts/promentor.py verify {chapter_id}` 校验每处 `path/to/file:start-end` 真实存在且未越界。
 
 ### 3. `lab.json`（Lab 契约定义）
 - 严格遵守 `references/data-format.md` §1.5：声明精确的 `files`、`starter_files`、`test_file`、`interface.types`、`interface.functions`、`test_command` 与可选 `notes`。
@@ -120,7 +122,7 @@
 - **严禁在骨架中剧透核心算法或写好关键实现**。
 
 ### 5. `lab_test.<ext>`（分层黑盒行为测试）
-- 按 §4.6 与 `references/languages.md` 编写，命名贴合目标语言测试框架（`lab_test.go`、`test_lab.py`、`lab.test.ts` 等）。
+- 按 §4.6 与 `references/languages.md` 编写，命名贴合目标语言测试框架（`lab_test.go`、`test_lab.py`、`lab_test.ts` 等；TS/JS 禁止使用会被宿主收集的 `*.test.*` / `*.spec.*`）。
 
 ### 6. Final / 组装章可运行入口
 - 仅在 Final / 组装章额外于课程根目录生成可运行入口（如 `.promentor/main.go`、`.promentor/main.py`、`.promentor/index.ts`），与章节目录分离避免包冲突。
@@ -143,7 +145,7 @@
 
 ### 路径安全示例
 
-**Go 示例**（外部测试包 + 清晰分层；若宿主有 `go.mod` 使用 `<host_module>/.promentor/chapters/ch02-router`，若使用独立 `.promentor/go.mod` 使用 `promentor/course/chapters/ch02-router`）：
+**Go 示例**（外部测试包 + `guardPanic` 隔离单个 panic + 清晰分层；若宿主有 `go.mod` 使用 `<host_module>/.promentor/chapters/ch02-router`，若使用独立 `.promentor/go.mod` 使用 `promentor/course/chapters/ch02-router`）：
 
 ```go
 package router_test
@@ -155,8 +157,16 @@ import (
 	student "promentor/course/chapters/ch02-router"
 )
 
+func guardPanic(t *testing.T) {
+	t.Helper()
+	if r := recover(); r != nil {
+		t.Fatalf("unimplemented or panic: %v", r)
+	}
+}
+
 // Part A: 基础行为
 func TestPartA_StaticRoute(t *testing.T) {
+	defer guardPanic(t)
 	r := student.NewRouter()
 	r.AddRoute("GET", "/users", func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -169,6 +179,7 @@ func TestPartA_StaticRoute(t *testing.T) {
 
 // Part B: 边界与异常
 func TestPartB_MethodMismatch(t *testing.T) {
+	defer guardPanic(t)
 	r := student.NewRouter()
 	r.AddRoute("GET", "/users", func(w http.ResponseWriter, req *http.Request) {})
 	h, _ := r.FindRoute("POST", "/users")
@@ -179,6 +190,7 @@ func TestPartB_MethodMismatch(t *testing.T) {
 
 // Part C: 嵌套参数与优先级
 func TestPartC_StaticPriorityOverParam(t *testing.T) {
+	defer guardPanic(t)
 	r := student.NewRouter()
 	var hit string
 	r.AddRoute("GET", "/users/:id", func(w http.ResponseWriter, req *http.Request) { hit = "param" })
@@ -231,13 +243,21 @@ if __name__ == "__main__":
 
 ### 生成期 Red-State 自检（强制门禁）
 
-每章产物写完后，**必须立即**在项目根目录执行该章 `lab.json` 的 `test_command`（替换 `{chapter_dir}`），核验以下 3 点：
+每章产物写完后，**优先运行内置脚本**完成门禁与校验和写入（无 Python 3 环境时按下方 4 点手工核验）：
 
+```bash
+python3 <skill_dir>/scripts/promentor.py gate red {chapter_id}
+python3 <skill_dir>/scripts/promentor.py checksum {chapter_id}
+python3 <skill_dir>/scripts/promentor.py verify {chapter_id}
+```
+
+核验要点：
 1. **成功编译/加载**：无语法错误、无类型签名不匹配、无 `ImportError` / `ModuleNotFoundError` / 找不到包 / 命令不存在等环境问题。
-2. **测试实际执行且按预期失败（Red State）**：进程返回非零退出码，且失败原因是骨架代码的 `not implemented` / `NotImplementedError` / `panic` 或行为断言失败，而非 0 tests collected。
-3. **计算并写入 `test_checksum`**：自检通过后计算 `test_file` 的 SHA-256（`sha256:<64位小写十六进制>`）写入 `lab.json`，再将 `course.json` 该章的 `generation_status` 置为 `"generated"`。
+2. **测试按预期失败（Red State）**：进程返回非零退出码，失败原因是骨架代码的 `not implemented` / `NotImplementedError` / `panic` 或行为断言失败，而非 0 tests collected。
+3. **实际执行的测试数 = 测试文件声明的测试数**：确保所有用例均完整执行并报告结果，不会因单条未捕获的 `panic` / `abort` 中断整个测试进程。
+4. **写入 `test_checksum` 与完成校验**：自检通过后计算 `test_file` 的 SHA-256（`sha256:<64位小写十六进制>`）写入 `lab.json`，再将 `course.json` 该章的 `generation_status` 置为 `"generated"`。
 
-若自检遇到编译、导入、路径或框架配置错误，**当场修复并重新验证**，禁止带着坏掉的测试进入教学或下一章。
+若自检遇到编译、导入、路径或用例中断错误，**当场修复并重新验证**，禁止带着坏掉的测试进入教学或下一章。
 
 ---
 

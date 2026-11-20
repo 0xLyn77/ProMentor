@@ -29,8 +29,8 @@ test("Part A: emit invokes matching async handlers in order", async () => {
 // Part B: 边界与异常
 test("Part B: empty pattern or topic throws error", async () => {
   const bus = new EventBus();
-  assert.throws(() => bus.on("", () => {}));
-  await assert.rejects(() => bus.emit("", {}));
+  assert.throws(() => bus.on("", () => {}), /empty/);
+  await assert.rejects(() => bus.emit("", {}), /empty/);
 });
 
 // Part C: 派发期安全退订

@@ -43,11 +43,13 @@ ProMentor 课程大纲：《{项目名} 内部设计》
 
 4. **Step 4：确认后立即落盘元数据**
    - 写入 `.promentor/course.json`（每章初始 `generation_status: "pending"`）与初始 `.promentor/progress.json`（每章初始 `status: "not_started"`、`score: 0`、`attempts: 0`、`hint_level_reached: 0`）。
-   - 若目标项目根目录 `.gitignore` 未包含 `.promentor/`，自动追加 `.promentor/`。
+   - 忽略 `.promentor/`：优先运行 `python3 <skill_dir>/scripts/promentor.py exclude`（Git 仓库内写入 `.git/info/exclude`，**不修改已跟踪的 `.gitignore`**；仅非 Git 目录回退写入 `.gitignore`）。无 Python 3 时按同一规则手工写入。
 5. **Step 5：生成章节 + Red-State 自检**
    - 默认模式（`generation_mode: "lazy"`）：仅生成第 1 章。
    - `--all` 模式（`generation_mode: "all"`）：按顺序逐章生成，每完成一章汇报进度（如 `Ch 1/4 已生成并通过 Red-State 自检`）。
-   - 每章严格生成：`lecture.md`、`source.md`（Part 1 + Part 2）、`lab.json`、Starter Stub 骨架代码、分层 `lab_test`（以及 Final 章根目录入口），执行 `test_command` 验证进入干净的 **Red State**，计算并写入 `test_checksum`，最后将 `course.json` 该章更新为 `generation_status: "generated"`。
+   - 每章严格生成：`lecture.md`、`source.md`（Part 1 + Part 2）、`lab.json`、Starter Stub 骨架代码、分层 `lab_test`（以及 Final 章根目录入口）。
+   - 优先调用内置脚本完成门禁与校验和（无 Python 3 时手工执行 `test_command` 与 SHA-256 计算）：
+     `python3 <skill_dir>/scripts/promentor.py gate red {ch}` → `checksum {ch}` → `verify {ch}`，通过后将 `course.json` 该章更新为 `generation_status: "generated"`。
 6. **Step 6：输出启动引导**
 
 ```text
@@ -59,7 +61,7 @@ ProMentor 课程大纲：《{项目名} 内部设计》
 
 ### 1.2 断点续传（`/promentor init --resume`）
 
-当 `init` 在中途中断时，按以下规则可靠恢复：
+当 `init` 在中途中断时，优先运行 `python3 <skill_dir>/scripts/promentor.py resume-scan` 获取需重新生成的章节清单（无 Python 3 时按以下手工步骤执行）：
 
 1. 检查 `.promentor/course.json` 是否存在：
    - 若不存在（中断在大纲确认前），提示并从标准 `init` 流程重新开始。
@@ -72,7 +74,7 @@ ProMentor 课程大纲：《{项目名} 内部设计》
    - `lab.json` 中 `files` 与 `starter_files` 声明的全部骨架文件存在；
    - `lab.json` 中 `test_file` 存在且与 `test_checksum` 一致；
    - （若为 Final 章）课程根目录可运行入口存在。
-4. 任意一项缺失或残缺时，**完整重新生成该章**并重新通过 Red-State 自检与 `test_checksum` 写入；已完整通过校验的章节直接跳过，不重复生成。
+4. 任意一项缺失或残缺时，**完整重新生成该章**并通过 `gate red` + `checksum` + `verify`；已完整通过校验的章节直接跳过，不重复生成。
 
 ---
 
@@ -101,11 +103,11 @@ ProMentor: {project} ({language} · {mode})
 ## 3. `/promentor learn <chapter>`
 
 1. **定位章节**：按 `references/data-format.md` §1.2 简写规则匹配 `course.json`（支持 `ch01`、`1`、`router`、`final` 等）。
-2. **检查 Commit 锚定**：执行 §8.1 检查；如源码有变更，先告知用户并提供选项。
+2. **检查 Commit 锚定**：执行 §8.1 检查；如 HEAD 已更新，附带简明提示。
 3. **检查前置依赖**：若 `prerequisites` 中存在未完成章节，礼貌提醒但允许继续。
 4. **按需生成（Lazy Generation）**：
-   - 检查该章 `generation_status` 及文件完整性（同 §1.2 校验清单）。
-   - 若尚未生成或残缺：先加载 `references/generation.md` 与 `references/languages.md`，现场读取原始源码及前置章节学生实现，生成本章完整产物、跑通 Red-State 自检、写入 `test_checksum`，并将 `course.json` 标记为 `"generated"`。
+   - 检查该章 `generation_status` 及文件完整性（优先调用 `promentor.py verify {chapter_id}`，无 Python 3 时按 §1.2 清单核验）。
+   - 若尚未生成或残缺：先加载 `references/generation.md` 与 `references/languages.md`，通过 `git show {source_commit}:{path}` 读取原始源码并结合前置章节学生实现，生成本章完整产物后执行 `promentor.py gate red {chapter_id}` → `checksum` → `verify`，再将 `course.json` 标记为 `"generated"`。
 5. **展开教学**（结合 `references/teaching.md` §3）：
    - **概念引入**：1–2 句话点明本章在系统中的定位与核心矛盾。
    - **讲义讲解**：基于 `lecture.md` 对话式讲解概念、设计权衡与 Mermaid 图表（`challenge` 模式下严禁剧透实现代码）。
@@ -169,18 +171,18 @@ Part C · 优先级与扩展
 ## 6. `/promentor submit`
 
 1. 确定当前章节，读取 `lab.json`。
-2. **测试文件防篡改校验（强制）**：执行 §8.2 核验 `test_file` 的 SHA-256 与 `lab.json` 的 `test_checksum` 一致；不一致时**拒绝提交**，提示恢复测试文件。
-3. **运行全量行为测试**：执行 `test_command`。若存在任何失败用例，**拒绝提交**并展示失败详情，建议继续修改或请求 `/promentor hint`。
-4. **目录制归档**：
-   - 计算本次提交编号 `N = progress.chapters[id].attempts + 1`。
-   - 创建目录 `.promentor/submissions/{chapter_id}/attempt_{N}/`，将 `lab.json` 的 `files[].path` 声明的全部实现文件按相对路径完整复制进去。
-5. **更新 `progress.json`**：
-   - `status`: `"completed"`
-   - `score`: `100`
-   - `attempts`: `N`
-   - `completed_at`: 若此前未设置，写入当前 ISO-8601 UTC 时间戳
-   - `last_submitted_at`: 写入当前 ISO-8601 UTC 时间戳
-6. **展示提交结果**：
+2. **绿态门禁与目录制归档**：
+   - 优先调用内置脚本完成测试全通过核验、防篡改校验、目录归档与进度更新：
+     ```bash
+     python3 <skill_dir>/scripts/promentor.py gate green {chapter_id}
+     python3 <skill_dir>/scripts/promentor.py archive {chapter_id}
+     ```
+   - 若测试失败或 `test_checksum` 不一致，**拒绝提交**并展示原因；无 Python 3 时按以下手工步骤回退：
+     1. 核验 `test_file` 的 SHA-256 与 `lab.json` 的 `test_checksum` 一致（§8.2）；
+     2. 执行 `test_command` 确认全部用例执行且通过；
+     3. 计算 `N = progress.chapters[id].attempts + 1`，创建 `.promentor/submissions/{chapter_id}/attempt_{N}/` 并完整复制 `lab.json` 的 `files[].path`；
+     4. 更新 `progress.json`：`status: "completed"`、`score: 100`、`attempts: N`、首次写入 `completed_at`、更新 `last_submitted_at`。
+3. **展示提交结果**：
    - 若为首次提交（`N == 1`）：祝贺通过，提示运行 `/promentor review` 解锁源码深读与五维对比，或直接 `/promentor learn <next_ch>`。
    - 若为二次重构提交（`N >= 2`）：祝贺完成重构版本 `attempt_{N}`，提示运行 `/promentor review` 获取与上一版及原始源码的三方增量对比！
 
@@ -196,7 +198,7 @@ Part C · 优先级与扩展
 4. **收集材料**：
    - 读取 `.promentor/submissions/{chapter_id}/attempt_{N}/` 下的学生代码；
    - 若 `N >= 2`，同时读取 `attempt_{N-1}/` 用于增量对比；
-   - 读取 `course.json` 中本章 `source_files` 对应的原始源码；
+   - 读取 `course.json` 中本章 `source_files` 对应的原始源码：**当 `source_commit` 非空时一律通过 `git show {source_commit}:{path}` 读取**（`source_commit` 为空时读工作区文件），保证行号与锚定版本完全一致；
    - 读取本章 `lecture.md` 与 `source.md`（此时**正式解锁 Part 2 提交后深读**）。
 5. **输出并落盘 Review**：
    - 按 `references/teaching.md` §5 进行五维对比（`N >= 2` 时增加“与 `attempt_{N-1}` 的演进对比”）、剖析原项目关键源码行与设计权衡，并在结尾给出 1 个具体的**重构挑战（Challenge）**。
@@ -209,13 +211,12 @@ Part C · 优先级与扩展
 
 ### 8.1 源码 Commit 锚定检查（`learn` / `review` 时）
 
-- 若 `course.json` 的 `source_commit` 非空，执行 `git rev-parse HEAD` 对比：
-  - 若当前 HEAD 与 `source_commit` 不一致（或本章 `source_files` 存在本地修改），主动提醒用户：
-    > “检测到原项目源码已从 `{old_sha[:7]}` 变更到 `{new_sha[:7]}`，`source.md` 中的行号可能偏移。你可以选择：继续阅读 / 仅刷新本章行号标注 / 更新课程锚点。”
+- 若 `course.json` 的 `source_commit` 非空，执行 `git rev-parse HEAD` 对比；若 HEAD 与 `source_commit` 不一致，输出简明提示（课程所有源码读取均通过 `git show {source_commit}:{path}` 锚定，不受工作区变更影响）：
+  > “原项目已更新至 `{new_sha[:7]}`，课程仍基于 `{old_sha[:7]}` 讲解；如需基于新版本重建，运行 `/promentor init`。”
 
 ### 8.2 测试文件防篡改校验（`submit` 前强制、`test` 时建议）
 
-- 计算 `{chapter_dir}/{test_file}` 的 SHA-256 摘要（如 `shasum -a 256` 或 `sha256sum` 或 `python3 -c 'import hashlib...'`），与 `lab.json` 的 `test_checksum`（去掉 `sha256:` 前缀）比对。
+- 优先调用 `python3 <skill_dir>/scripts/promentor.py verify {chapter_id}`（或在 `submit` 时由 `promentor.py archive` 自动核验）；无 Python 3 时手工计算 `{chapter_dir}/{test_file}` 的 SHA-256（`shasum -a 256` / `sha256sum`），与 `lab.json` 的 `test_checksum` 比对。
 - 若不一致：
   - `submit` 立即中止并拒绝提交；
-  - 提示学生检查对测试文件的改动并还原；若学生反馈测试本身存在 Bug，需先核实并经用户明确确认后再由导师修正测试并更新 `test_checksum`。
+  - 提示学生检查对测试文件的改动并还原；若学生反馈测试本身存在 Bug，需先核实并经用户明确确认后再由导师修正测试并重新运行 `promentor.py checksum {chapter_id}` 更新 `test_checksum`。

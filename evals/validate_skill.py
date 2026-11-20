@@ -13,6 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILL_DIR = REPO_ROOT / "skills" / "promentor"
 SKILL_MD = SKILL_DIR / "SKILL.md"
 REFS_DIR = SKILL_DIR / "references"
+HELPER_SCRIPT = SKILL_DIR / "scripts" / "promentor.py"
 OPENAI_YAML = SKILL_DIR / "agents" / "openai.yaml"
 README_MD = REPO_ROOT / "README.md"
 GITIGNORE = REPO_ROOT / ".gitignore"
@@ -74,6 +75,21 @@ def validate_skill() -> list[str]:
         errors.append(f"SKILL.md frontmatter name must be 'promentor', got {fm.get('name')!r}")
     if not fm.get("description"):
         errors.append("SKILL.md frontmatter missing description")
+
+    # Verify bundled helper script exists, is indexed in SKILL.md, and runs --help cleanly.
+    if not HELPER_SCRIPT.is_file():
+        errors.append(f"Missing bundled helper script: {HELPER_SCRIPT.relative_to(REPO_ROOT)}")
+    else:
+        if "scripts/promentor.py" not in skill_text:
+            errors.append("SKILL.md missing index entry for scripts/promentor.py")
+        help_proc = subprocess.run(
+            [sys.executable, str(HELPER_SCRIPT), "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if help_proc.returncode != 0:
+            errors.append(f"scripts/promentor.py --help failed (exit {help_proc.returncode}): {help_proc.stderr}")
 
     # Verify all referenced references/*.md files exist and none are orphaned.
     existing_refs = {p.name for p in REFS_DIR.glob("*.md")} if REFS_DIR.is_dir() else set()
@@ -159,7 +175,7 @@ def main() -> int:
         return 1
     skill_lines = len(SKILL_MD.read_text(encoding="utf-8").splitlines())
     ref_count = len(list(REFS_DIR.glob("*.md")))
-    print(f"SKILL VALIDATION PASSED (SKILL.md: {skill_lines} lines, {ref_count} reference docs)")
+    print(f"SKILL VALIDATION PASSED (SKILL.md: {skill_lines} lines, {ref_count} reference docs, scripts/promentor.py OK)")
     return 0
 
 

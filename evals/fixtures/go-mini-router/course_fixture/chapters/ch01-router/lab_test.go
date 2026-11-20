@@ -7,8 +7,16 @@ import (
 	student "example.com/go-mini-router/.promentor/chapters/ch01-router"
 )
 
+func guardPanic(t *testing.T) {
+	t.Helper()
+	if r := recover(); r != nil {
+		t.Fatalf("unimplemented or panic: %v", r)
+	}
+}
+
 // Part A: 基础行为
 func TestPartA_StaticRoute(t *testing.T) {
+	defer guardPanic(t)
 	r := student.NewRouter()
 	var called bool
 	r.AddRoute("GET", "/users", func(w http.ResponseWriter, req *http.Request, params map[string]string) {
@@ -25,6 +33,7 @@ func TestPartA_StaticRoute(t *testing.T) {
 }
 
 func TestPartA_ParamRoute(t *testing.T) {
+	defer guardPanic(t)
 	r := student.NewRouter()
 	r.AddRoute("GET", "/users/:id", func(w http.ResponseWriter, req *http.Request, params map[string]string) {})
 	h, params := r.FindRoute("GET", "/users/42")
@@ -38,6 +47,7 @@ func TestPartA_ParamRoute(t *testing.T) {
 
 // Part B: 边界与异常
 func TestPartB_MethodMismatchAndNotFound(t *testing.T) {
+	defer guardPanic(t)
 	r := student.NewRouter()
 	r.AddRoute("GET", "/users", func(w http.ResponseWriter, req *http.Request, params map[string]string) {})
 	if h, _ := r.FindRoute("POST", "/users"); h != nil {
@@ -50,6 +60,7 @@ func TestPartB_MethodMismatchAndNotFound(t *testing.T) {
 
 // Part C: 优先级与嵌套参数
 func TestPartC_StaticPriorityAndNestedParams(t *testing.T) {
+	defer guardPanic(t)
 	r := student.NewRouter()
 	var tag string
 	r.AddRoute("GET", "/users/:id", func(w http.ResponseWriter, req *http.Request, params map[string]string) {

@@ -13,8 +13,8 @@
   "starter_files": [
     "event_bus.ts"
   ],
-  "test_file": "lab.test.ts",
-  "test_checksum": "sha256:04184e92aa9ee5d99237d7874203f543a327f8aacfa1a315af3b5d2b337cb465",
+  "test_file": "lab_test.ts",
+  "test_checksum": "sha256:68152a0288b1b041b33dd0beb235ef9c35b049e76d9ab12ae2d519fe5dccc901",
   "interface": {
     "types": [
       {
@@ -43,7 +43,7 @@
       }
     ]
   },
-  "test_command": "cd {chapter_dir} && node --test lab.test.ts",
+  "test_command": "node --test {chapter_dir}/lab_test.ts",
   "notes": [
     "异步中间件管道将在 ch02-pipeline 实现，本章直接顺序执行匹配 handler。",
     "扩展挑战：首次 Review 后预拆订阅模式段，减少 emit 热路径重复字符串 split。"

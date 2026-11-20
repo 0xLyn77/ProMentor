@@ -69,7 +69,9 @@ func (r *Router) FindRoute(method, path string) (Handler, map[string]string) {
 }
 ```
 
-- **黑盒测试导入模板**：
+- **黑盒测试导入与 Panic 隔离模板**：
+  - 骨架代码使用 `panic("not implemented")` 时，单个未捕获 panic 会直接中止整个 `go test` 进程，导致其余测试用例无法执行、分层报告与得分失真。
+  - **规定**：在 `lab_test.go` 中定义统一的 `guardPanic(t *testing.T)`，每个 `Test*` 函数首行调用 `defer guardPanic(t)`（必须直接 `defer` 含 `recover()` 的函数，才能捕获当前测试协程的 panic）：
 
 ```go
 package router_test
@@ -81,6 +83,19 @@ import (
 	// 若使用独立 .promentor/go.mod，则为：
 	// student "promentor/course/chapters/ch02-router"
 )
+
+func guardPanic(t *testing.T) {
+	t.Helper()
+	if r := recover(); r != nil {
+		t.Fatalf("unimplemented or panic: %v", r)
+	}
+}
+
+func TestPartA_StaticRoute(t *testing.T) {
+	defer guardPanic(t)
+	r := student.NewRouter()
+	_ = r
+}
 ```
 
 ---
@@ -95,8 +110,9 @@ import (
   3. `poetry run python`（若存在 `poetry.lock` 且 `poetry` 可用）
   4. 系统 `python3`
 - **测试框架探测**：
-  - 若探测到的解释器已安装 `pytest`：使用 `<python> -m pytest -v --rootdir=. -o addopts="" test_lab.py`（`--rootdir=.` 与 `-o addopts=""` 避免读取宿主 `pyproject.toml`/`pytest.ini` 里的覆盖率门槛或忽略点目录配置）。
-  - 若未安装 `pytest`：回退到标准库 `<python> -m unittest -v test_lab.py`，零依赖开箱即用。
+  - 统一从**项目根目录**执行，**不要先 `cd {chapter_dir}`**（否则相对路径 `.venv/bin/python` 在 `cd` 后会失效）；测试文件已通过 `Path(__file__).resolve().parent` 解析同目录导入，与工作目录无关。
+  - 若探测到的解释器已安装 `pytest`：使用 `<python> -m pytest -v -p no:cacheprovider -o addopts="" {chapter_dir}/test_lab.py`（`-p no:cacheprovider` 避免在目录留缓存，`-o addopts=""` 屏蔽宿主覆写参数）。
+  - 若未安装 `pytest`：回退到标准库 `<python> {chapter_dir}/test_lab.py -v`（测试文件末尾包含 `unittest.main()`），零依赖开箱即用。
 - **模块导入路径**：
   - **严禁**把相对路径（如 `.promentor/chapters/...`）直接插入 `sys.path`（切换工作目录后立即失效）。
   - **必须**基于测试文件绝对路径解析：`sys.path.insert(0, str(Path(__file__).resolve().parent))`。
@@ -105,9 +121,9 @@ import (
 ### 命名与命令模板
 
 - **测试文件**：`test_lab.py`（同时兼容 `pytest` 和 `unittest`）
-- **`test_command`**：
-  - `pytest`：`cd {chapter_dir} && python3 -m pytest -v --rootdir=. -o addopts="" test_lab.py`
-  - `unittest`（零依赖回退）：`cd {chapter_dir} && python3 -m unittest -v test_lab.py`
+- **`test_command`**（从项目根目录直接执行，不 `cd`）：
+  - `pytest`：`<python> -m pytest -v -p no:cacheprovider -o addopts="" {chapter_dir}/test_lab.py`
+  - `unittest`（零依赖回退）：`<python> {chapter_dir}/test_lab.py -v`
 - **骨架代码模板**：
 
 ```python
@@ -149,19 +165,21 @@ from router import Router
 
 ### 隔离机制与避坑
 
-- **点目录被测试框架忽略**：`vitest`、`jest` 默认忽略 `.` 开头的目录（包括 `.promentor/`）。
-  - **首选方案（Node >= 22.6 原生支持 TS 类型擦除 + 内置 `node --test`）**：零依赖、不受宿主 bundler/vitest 配置干扰！
-    - 测试命令：`cd {chapter_dir} && node --test lab.test.ts`（或 JS 项目 `node --test lab.test.mjs`）。
-    - 注意：原生 TS 模式下使用可擦除语法（避免 `enum`、parameter properties 等需转译语法），导入同目录 TS 文件时写明 `.ts` 扩展名（如 `import { EventBus } from "./event_bus.ts";`）。
-  - **Vitest 方案**（当项目使用 Vitest 且需编译期特性或依赖宿主 `node_modules`）：
-    - 在 `.promentor/` 下创建极简 `vitest.config.mts`（明确关闭默认排除或设置 `include: ["chapters/**/*.test.ts"]`），并通过 `npx vitest run --config .promentor/vitest.config.mts {chapter_dir}/lab.test.ts` 运行。
-  - **Jest 方案**：传 `--testPathIgnorePatterns='["/node_modules/"]'` 覆盖对隐藏目录的忽略，并指向显式文件路径。
+- **避免被宿主 `npm test` 收集**：Vitest（`configDefaults.exclude` 仅排除 `.git`/`.idea`/`.cache` 等）和 Jest **默认都会扫描 `.promentor/` 目录**。若测试命名为 `*.test.ts` 或 `*.spec.ts`，初始红态的 Lab 测试会让宿主项目的 `npm test` 直接变红！
+  - **规避规则**：Lab 测试文件一律命名为 **`lab_test.ts`**（TS）或 **`lab_test.mjs`**（JS）——不匹配 Vitest 默认 `**/*.{test,spec}.*` 与 Jest 默认 `?(*.)+(spec|test).*` 规则，彻底隔离宿主测试。
+- **首选运行器（Node 原生 `node --test`）**：
+  - Node 内置类型擦除在 **Node >= 22.18** 及 **Node >= 23.6** 默认开启；在 **Node 22.6–22.17** 需附加 `--experimental-strip-types`。
+  - `init` 第一步检测 `node -v`，按版本生成对应 `test_command`：
+    - Node >= 22.18 / >= 23.6：`node --test {chapter_dir}/lab_test.ts`
+    - Node 22.6–22.17：`node --experimental-strip-types --test {chapter_dir}/lab_test.ts`
+  - 原生 TS 模式下使用可擦除语法（避免 `enum`、parameter properties 等需转译语法），导入同目录 TS 文件写明 `.ts` 扩展名（如 `import { EventBus } from "./event_bus.ts";`）。
+- **可选方案（Vitest / Jest）**：仅当目标项目强依赖非擦除 TS 特性或 Vite/Jest 插件时采用，仍保持 `lab_test.ts` 命名，并通过显式传入文件路径与独立配置运行，不修改宿主配置。
 - **ESM / CJS 隔离**：若宿主 `package.json` 的 `"type"` 与课程脚本风格冲突，可在 `.promentor/package.json` 中放置最小配置 `{ "type": "module" }`，隔离模块解析模式，同时 Node 向上查找仍可复用宿主 `node_modules`。
 
 ### 命名与命令模板
 
-- **测试文件**：`lab.test.ts`（TS）或 `lab.test.mjs`（JS）
-- **`test_command`**：`cd {chapter_dir} && node --test lab.test.ts`
+- **测试文件**：`lab_test.ts`（TS）或 `lab_test.mjs`（JS）（**禁止**使用 `*.test.*` / `*.spec.*`）
+- **`test_command`**：`node --test {chapter_dir}/lab_test.ts`（Node 22.6–22.17 加 `--experimental-strip-types`）
 - **骨架代码模板**：
 
 ```ts
@@ -230,7 +248,8 @@ impl Router {
 
 - **避免侵入宿主 Maven / Gradle**：不修改宿主 `pom.xml` 或 `build.gradle`。
 - **最小独立编译测试模板**：
-  - 若仅依赖 JDK 标准库，用 `javac` 将骨架文件与 `LabTest.java` 编译到临时输出目录（如 `/tmp/promentor-{chapter_id}`），再用 `java -ea` 运行测试主类（`LabTest` 使用清晰的分层测试方法输出每项 PASS/FAIL 并以非零码退出）。
+  - 若仅依赖 JDK 标准库，用 `javac` 将骨架文件与 `LabTest.java` 编译到临时输出目录（如 `/tmp/promentor-{chapter_id}`），再用 `java -ea` 运行测试主类。
+  - **逐用例异常隔离**：自制 `LabTest` 运行器必须对每条用例用 `try { test.run(); } catch (Throwable t) { ... }` 捕获异常（含 `UnsupportedOperationException` / `AssertionError`），逐项打印 `PASS` / `FAIL` 及汇总 `passed/total` 后，若有失败再调用 `System.exit(1)`，避免首条未实现异常中断剩余用例。
   - 若需复用 JUnit 5，可探测本地已有 `junit-platform-console-standalone.jar` 或宿主依赖 classpath；否则优先零依赖 `java -ea` 自包含测试运行器。
 
 ### 命名与命令模板
@@ -256,6 +275,9 @@ public class Router {
 - **避免侵入宿主 CMake / Makefile**：章节 Lab 通过单条 `cc` / `c++` 命令直接编译，测试二进制输出到 `/tmp/`，避免在章节目录遗留二进制垃圾文件。
 - **头文件与实现分离**：将公开签名放在 `<module>.h` / `<module>.hpp`（作为只读契约或同步列入 `starter_files`），学生实现文件为 `<module>.c` / `<module>.cpp`。
 - **编译警告即错误检查**：编译命令带上 `-Wall -Wextra`，保证签名一致与基础内存安全。
+- **逐用例异常/失败隔离**：
+  - **C++**：自制测试运行器必须对每条用例用 `try { fn(); } catch (const std::exception& e) { ... }` 捕获异常，打印每项 `PASS` / `FAIL` 与汇总后再返回非零退出码，禁止未捕获异常直接 `std::terminate`。
+  - **C**：骨架代码避免直接调用 `abort()`，改为返回明确错误码 / `NULL`；自制运行器使用返回状态检查替代直接终止进程的 `assert()`，确保全部用例均执行并输出每项 `PASS` / `FAIL` 与汇总后再返回非零码。
 
 ### 命名与命令模板
 

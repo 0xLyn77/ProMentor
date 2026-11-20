@@ -14,7 +14,7 @@
     "router.go"
   ],
   "test_file": "lab_test.go",
-  "test_checksum": "sha256:777febf46ac54b6f65ffa3b90de53294e06280d7a362d15d48349c8c86bbf304",
+  "test_checksum": "sha256:67c300a52a8e0ac7320b03164a472a99fa3c3d56ab674a33c7b5cadc946932ce",
   "interface": {
     "types": [
       {
