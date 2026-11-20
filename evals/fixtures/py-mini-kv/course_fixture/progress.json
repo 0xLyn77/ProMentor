@@ -1,0 +1,18 @@
+{
+  "project": "py-mini-kv",
+  "current_chapter": "ch01-kv-ttl",
+  "chapters": {
+    "ch01-kv-ttl": {
+      "status": "in_progress",
+      "score": 0,
+      "attempts": 0,
+      "hint_level_reached": 0
+    },
+    "ch02-wal": {
+      "status": "not_started",
+      "score": 0,
+      "attempts": 0,
+      "hint_level_reached": 0
+    }
+  }
+}

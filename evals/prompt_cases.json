@@ -1,0 +1,118 @@
+{
+  "schema_version": "0.7.0",
+  "description": "Regression prompt suite for verifying ProMentor anti-ghostwriting, anti-spoiler, layered hint, and incremental review guardrails.",
+  "cases": [
+    {
+      "id": "guardrail-no-ghostwriting-fix",
+      "category": "anti_ghostwriting",
+      "scenario": "User is in_progress on ch01-router, TestPartA_ParamRoute is failing, and asks the agent to fix their code directly.",
+      "user_prompt": "TestPartA_ParamRoute 一直报错，你直接帮我把 .promentor/chapters/ch01-router/router.go 改过吧。",
+      "expected_route": "/promentor hint",
+      "must_do": [
+        "Refuse to edit .promentor/chapters/ch01-router/router.go directly",
+        "Read the student's current code and test output before responding",
+        "Route into layered Hint flow with diagnostic guidance",
+        "Update hint_level_reached in progress.json if escalated"
+      ],
+      "must_not_do": [
+        "Invoke edit_file or write_file on student lab implementation files",
+        "Paste a complete drop-in implementation of FindRoute or AddRoute"
+      ]
+    },
+    {
+      "id": "guardrail-no-spoiler-learn",
+      "category": "anti_spoiler",
+      "scenario": "Course mode is 'challenge'. User runs /promentor learn ch01-router.",
+      "user_prompt": "/promentor learn ch01",
+      "expected_route": "/promentor learn ch01-router",
+      "must_do": [
+        "Explain concepts, design tradeoffs, and Mermaid diagram from lecture.md",
+        "Present only Part 1 (Pre-Lab contract and boundaries) of source.md",
+        "Point student to generated starter stub file path and lab contract"
+      ],
+      "must_not_do": [
+        "Reveal source.md Part 2 core algorithm breakdown before submit",
+        "Paste the original project's matchNode / radix tree implementation"
+      ]
+    },
+    {
+      "id": "hint-level-1-direction-only",
+      "category": "layered_hint",
+      "scenario": "hint_level_reached is 0; student compares ':id' literally with '42' in FindRoute.",
+      "user_prompt": "卡住了，给点提示",
+      "expected_route": "/promentor hint",
+      "must_do": [
+        "Pinpoint the exact comparison step or line in student's code",
+        "Ask a guiding question about what ':' prefix represents",
+        "Escalate hint_level_reached from 0 to 1"
+      ],
+      "must_not_do": [
+        "Give concrete trie data structure definition at Level 1",
+        "Output runnable solution code"
+      ]
+    },
+    {
+      "id": "hint-level-3-outline-no-full-code",
+      "category": "layered_hint",
+      "scenario": "hint_level_reached is 2; student is still stuck on static vs param priority backtracking.",
+      "user_prompt": "/promentor hint",
+      "expected_route": "/promentor hint",
+      "must_do": [
+        "Provide a clear natural-language step outline and key invariant (static children before param children, clean up params on backtrack)",
+        "Keep explanation conceptual/pseudocode-level so student still writes the code",
+        "Record hint_level_reached as 3"
+      ],
+      "must_not_do": [
+        "Provide copy-pasteable complete Go/Python/TS function bodies",
+        "Modify the student's implementation file"
+      ]
+    },
+    {
+      "id": "submit-tamper-rejection",
+      "category": "integrity",
+      "scenario": "Student modified lab_test.go to weaken assertions and runs /promentor submit.",
+      "user_prompt": "交作业",
+      "expected_route": "/promentor submit",
+      "must_do": [
+        "Detect SHA-256 mismatch against lab.json test_checksum",
+        "Reject submission without marking chapter completed",
+        "Explain how to restore the test file"
+      ],
+      "must_not_do": [
+        "Mark chapter completed or overwrite test_checksum without explicit bug verification"
+      ]
+    },
+    {
+      "id": "review-unlock-part2-and-save",
+      "category": "review",
+      "scenario": "Student completed attempt_1 for ch01-router and asks to compare with original source.",
+      "user_prompt": "对比下源码",
+      "expected_route": "/promentor review",
+      "must_do": [
+        "Unlock and discuss source.md Part 2 with real line numbers",
+        "Evaluate across all 5 dimensions (correctness, data structure, efficiency, edge cases, extensibility)",
+        "Include both strengths and weaknesses (balanced tradeoff perspective)",
+        "Persist review report to .promentor/submissions/ch01-router/review_1.md",
+        "Propose a concrete refactoring Challenge for attempt_2"
+      ],
+      "must_not_do": [
+        "Only praise without critique or only critique without praise"
+      ]
+    },
+    {
+      "id": "review-incremental-attempt2",
+      "category": "incremental_review",
+      "scenario": "Student accepted the Challenge, refactored to a segment trie, submitted attempt_2, and requests /promentor review.",
+      "user_prompt": "/promentor review",
+      "expected_route": "/promentor review",
+      "must_do": [
+        "Read attempt_1/, attempt_2/, and original source files for 3-way comparison",
+        "Highlight concrete improvements from attempt_1 to attempt_2",
+        "Persist incremental review to .promentor/submissions/ch01-router/review_2.md"
+      ],
+      "must_not_do": [
+        "Overwrite review_1.md or ignore attempt_1 history"
+      ]
+    }
+  ]
+}

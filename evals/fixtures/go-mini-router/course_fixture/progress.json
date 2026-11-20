@@ -1,0 +1,18 @@
+{
+  "project": "go-mini-router",
+  "current_chapter": "ch01-router",
+  "chapters": {
+    "ch01-router": {
+      "status": "in_progress",
+      "score": 0,
+      "attempts": 0,
+      "hint_level_reached": 0
+    },
+    "ch02-middleware": {
+      "status": "not_started",
+      "score": 0,
+      "attempts": 0,
+      "hint_level_reached": 0
+    }
+  }
+}

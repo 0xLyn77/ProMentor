@@ -1,0 +1,63 @@
+{
+  "chapter_id": "ch01-kv-ttl",
+  "title": "内存键值存储与惰性 TTL 淘汰",
+  "description": "实现支持可注入时钟与惰性过期淘汰的多文件 KV 模块",
+  "language": "python",
+  "package": "ch01_kv_ttl",
+  "files": [
+    {
+      "path": "ttl.py",
+      "description": "TTL 截止时间计算与过期判断辅助模块"
+    },
+    {
+      "path": "store.py",
+      "description": "基于可注入时钟的 KVStore 核心实现"
+    }
+  ],
+  "starter_files": [
+    "ttl.py",
+    "store.py"
+  ],
+  "test_file": "test_lab.py",
+  "test_checksum": "sha256:44588cbae260a67a22bb32b904319279d5d789f2c7875df3c4c1c8b7d752dbfd",
+  "interface": {
+    "types": [
+      {
+        "name": "KVStore",
+        "kind": "class",
+        "doc": "支持惰性 TTL 淘汰的内存键值存储"
+      }
+    ],
+    "functions": [
+      {
+        "signature": "def compute_deadline(now: float, ttl_seconds: Optional[float]) -> Optional[float]",
+        "doc": "计算过期时间戳，无 TTL 返回 None"
+      },
+      {
+        "signature": "def is_expired(expires_at: Optional[float], now: float) -> bool",
+        "doc": "判断当前时间是否达到或超过过期时间戳"
+      },
+      {
+        "signature": "def put(self, key: str, value: str, ttl_seconds: Optional[float] = None) -> None",
+        "doc": "写入键值对并设置可选 TTL，空 key 抛出 ValueError"
+      },
+      {
+        "signature": "def get(self, key: str) -> Optional[str]",
+        "doc": "读取未过期键，已过期则惰性删除并返回 None"
+      },
+      {
+        "signature": "def delete(self, key: str) -> bool",
+        "doc": "删除键；仅当删除了有效未过期键时返回 True"
+      },
+      {
+        "signature": "def keys(self) -> list[str]",
+        "doc": "清理过期键并返回升序排列的活跃键列表"
+      }
+    ]
+  },
+  "test_command": "cd {chapter_dir} && python3 -m unittest -v test_lab.py",
+  "notes": [
+    "WAL 持久化将在 ch02-wal 实现，本章仅维护内存状态。",
+    "扩展挑战：首次 Review 后将双字典存储重构为单表元组结构以减少重复哈希查找。"
+  ]
+}

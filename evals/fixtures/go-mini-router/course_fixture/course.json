@@ -1,0 +1,46 @@
+{
+  "schema_version": "0.7.0",
+  "project": "go-mini-router",
+  "language": "go",
+  "mode": "challenge",
+  "focus": "router",
+  "generation_mode": "lazy",
+  "source_commit": "",
+  "generated_at": "2026-11-20T09:00:00Z",
+  "chapters": [
+    {
+      "id": "ch01-router",
+      "title": "HTTP 路由匹配与优先级设计",
+      "summary": "实现支持 HTTP 方法隔离、路径参数与静态优先级的路由器",
+      "difficulty": "hard",
+      "generation_status": "generated",
+      "prerequisites": [],
+      "learning_goals": [
+        "理解按 HTTP Method 分树与路径分段匹配契约",
+        "处理静态段优先于参数段及嵌套参数回溯"
+      ],
+      "source_files": ["router.go:1-112"],
+      "lab_interface": {
+        "package": "router",
+        "exports": ["Handler", "Router", "NewRouter", "Router.AddRoute", "Router.FindRoute"]
+      }
+    },
+    {
+      "id": "ch02-middleware",
+      "title": "中间件责任链与 net/http 适配",
+      "summary": "用高阶函数组合中间件管道并接入标准库 Handler",
+      "difficulty": "mid",
+      "generation_status": "pending",
+      "prerequisites": ["ch01-router"],
+      "learning_goals": [
+        "掌握逆序包装实现正序执行的责任链模式",
+        "理解 Router.ServeHTTP 对 net/http 的桥接"
+      ],
+      "source_files": ["middleware.go:1-25"],
+      "lab_interface": {
+        "package": "middleware",
+        "exports": ["Middleware", "Chain"]
+      }
+    }
+  ]
+}

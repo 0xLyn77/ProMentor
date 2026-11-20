@@ -1,200 +1,251 @@
 # 代码扫描与课程生成规范
 
-> 执行 `/promentor init` 时的详细生成方法。示例语言仅作演示，规范本身与语言无关。
+> 执行 `/promentor init`（含 `--all` / `--focus` / `--resume`）及 `/promentor learn` 按需生成章节时的详细规范。
+> 识别项目语言后，同步阅读 `references/languages.md` 获取对应语言的隔离与测试模板。
 
 ## 目录
 
 - [4.1 四轮扫描法](#41-四轮扫描法)
-- [4.2 大项目裁剪（>200 文件）](#42-大项目裁剪200-文件)
+- [4.2 大项目裁剪与子系统聚焦（--focus）](#42-大项目裁剪与子系统聚焦--focus)
 - [4.3 难度评级](#43-难度评级)
-- [4.4 Chapter 生成规范](#44-chapter-生成规范)
-- [4.5 测试生成规范](#45-测试生成规范)
-- [4.6 跨章 lab 依赖解耦](#46-跨章-lab-依赖解耦)
+- [4.4 按需逐章生成（Lazy Generation）与落盘顺序](#44-按需逐章生成lazy-generation与落盘顺序)
+- [4.5 Chapter 生成规范](#45-chapter-生成规范)
+- [4.6 分层测试与 Red-State 自检规范](#46-分层测试与-red-state-自检规范)
+- [4.7 跨章 Lab 依赖解耦](#47-跨章-lab-依赖解耦)
+
+---
 
 ## 4.1 四轮扫描法
 
-### 第一轮：结构探测
+先在项目根目录记录 `source_commit`（执行 `git rev-parse HEAD`，非 Git 仓库置空 `""`），再按四轮扫描理解架构：
 
-- **目标**：弄清项目规模、语言与模块边界
+### 第一轮：结构探测
+- **目标**：弄清项目语言、规模、工具链、运行环境与模块边界。
 - **操作**：
-  - 获取文件树（跳过 `.gitignore`、`vendor`、`node_modules`、`test` 目录）
-  - 搜索 `main` 函数 / 入口文件
-  - 搜索 package / namespace / module 声明
-  - 统计文件数与代码行数
-- **产出**：项目元信息（语言、规模、入口点、一级模块列表）
+  - 获取文件树（跳过 `.git`、`.promentor`、`vendor`、`node_modules`、`dist`、`build`、`test` 等目录）。
+  - 搜索入口文件（`main.go`、`main.py`、`src/main.rs`、`index.ts`、`app.ts` 等）与包/模块清单（`go.mod`、`pyproject.toml`、`package.json`、`Cargo.toml`）。
+  - 检测本地可用的解释器/编译器与测试框架（参考 `references/languages.md`）。
+  - 统计源码文件数与代码行数，向用户汇报识别结果并确认继续。
 
 ### 第二轮：核心类型识别
-
-- **目标**：定位核心数据结构与抽象
+- **目标**：定位核心数据结构、契约接口与组合关系。
 - **操作**：
-  - 搜索 type / class / interface 声明
-  - 读取关键类型的完整源码
-  - 识别嵌入 / 继承 / 组合关系
-  - 区分公开接口与内部实现
-- **产出**：核心类型清单与关系图
+  - 搜索 `type` / `struct` / `class` / `interface` / `trait` 声明，读取关键类型源码。
+  - 区分对外公开契约与内部实现细节，梳理依赖关系（供绘制 `classDiagram`）。
 
 ### 第三轮：调用链追踪
-
-- **目标**：理解请求或数据的完整生命周期
+- **目标**：理解核心请求、事件或数据的完整生命周期。
 - **操作**：
-  - 从入口点出发读取关键函数体
-  - 搜索函数名引用追踪调用关系
-  - 识别调用链深度与关键分支
-  - 标记扩展点（interface 实现、回调注册、插件机制）
-- **产出**：核心流程调用链与关键方法列表
+  - 从入口点出发追踪核心调用链、关键分支与扩展点（回调、中间件、插件、接口实现）。
+  - 记录核心流程节点与交互顺序（供绘制 `sequenceDiagram`）。
 
 ### 第四轮：架构归纳
-
-- **目标**：提炼设计模式，拟定教学路线
+- **目标**：提炼设计模式与关键权衡，拟定阶梯式 Chapter 大纲。
 - **操作**：
-  - 将前三轮发现归纳为架构层次
-  - 识别设计模式（中间件链、路由树、上下文传递、工厂模式等）
-  - 标记关键设计决策（“为什么用 A 而不是 B”）
-  - 拟定 Chapter 边界与教学顺序
-- **产出**：课程大纲与各章教学重点
+  - 按依赖拓扑顺序划分 Chapter（推荐 4–8 章；`--focus` 模式推荐 3–5 章）。
+  - 为每章确定：合法 `id`（见 `references/data-format.md` §1.2）、`title`、`summary`、`difficulty`、`prerequisites`、`learning_goals`、`source_files`（带真实行号范围）与 `lab_interface`。
 
-## 4.2 大项目裁剪（>200 文件）
+---
 
-当项目超过 200 文件时，应用聚焦策略：
+## 4.2 大项目裁剪与子系统聚焦（`--focus`）
 
-**拓扑排序**（从入口点 BFS 扩散）：
-- 前 3 层：核心 —— 完整阅读源码
-- 4–6 层：辅助 —— 读签名与注释
-- 7 层及以上：跳过（依赖库、工具函数）
+### 场景 A：子系统聚焦（`/promentor init --focus <模块/主题>` 或自然语言指定模块）
 
-**功能去重**：
-- 多个 Controller 仅路由不同 → 选一个深入
-- 多个 Middleware 仅逻辑不同 → 选一个深入
-- 其余仅记录文件名与一句话描述
+当用户只关心大型仓库中的特定子系统（如“只学路由层”、“聚焦存储引擎和 WAL”、“focus scheduler”）时：
+1. 定位目标子系统的核心目录/文件，仅向下追踪其直接契约边界（1–2 层调用上游与下游接口）。
+2. 将外部依赖抽象为最小接口/Mock 契约，不把无关子系统拖入课程。
+3. 规划 **3–5 章**精简路线（基础数据结构 → 核心流程 → 边界/并发处理 → 小型集成），在 `course.json` 中记录 `"focus": "<模块/主题>"`。
 
-**优先级标记**：
-- **P0**：入口文件、核心类型、入口方法体
-- **P1**：核心算法实现、关键调用链
-- **P2**：辅助工具、配置、常量
-- **排除**：`test`、`mock`、`vendor`、`generated`
+### 场景 B：全项目大仓库裁剪（>200 文件）
+
+- **拓扑扩散**：从入口点 BFS，前 3 层完整读源码，4–6 层读签名与注释，7 层以上跳过。
+- **功能去重**：同类 Controller / Middleware / Driver 只选 1 个代表深入剖析，其余仅记录名称。
+- **优先级标记**：P0（入口、核心类型、主干方法）> P1（核心算法、关键调用链）> P2（配置、工具）；排除 `test`、`mock`、`vendor`、`generated`。
+
+---
 
 ## 4.3 难度评级
 
-| 难度 | 特征 |
-|------|------|
-| `easy` | 概念直白，代码短小（<100 行），标准惯用写法 |
-| `mid` | 涉及 1–2 个设计决策，代码量中等，需要一定前置知识 |
-| `hard` | 包含项目最核心的设计，涉及非直观架构决策，需要 2+ 前置概念 |
+| 难度 | 判定特征 |
+| --- | --- |
+| `easy` | 概念直白，实现短小（<100 行），标准惯用写法 |
+| `mid` | 涉及 1–2 个设计决策，代码量中等，需理解 1 个前置概念 |
+| `hard` | 包含核心架构或非平凡数据结构选型，需 2+ 前置概念，边界出错会导致隐蔽故障 |
 
-标记为 `hard` 的典型条件：
-- 涉及非直观架构决策，需要解释“为什么用 A 而不是 B”
-- 包含非平凡的数据结构选型
-- 理解代码需要 2 个以上前置概念
-- 实现出错会导致系统以隐蔽方式故障
+---
 
-## 4.4 Chapter 生成规范
+## 4.4 按需逐章生成（Lazy Generation）与落盘顺序
 
-### `lecture.md`
+为降低长上下文退化、避免行号幻觉并让用户快速开练，严格遵循以下落盘顺序：
 
-- **输入**：本章相关原始源码 + 课程大纲上下文
-- **要求**：
-  1. 开篇一句话概括本章学什么
-  2. 解释它在整个系统中的位置
-  3. 拆解核心概念，每概念一小节
-  4. 每个概念配原始代码片段（标注关键行）
-  5. 重点解释设计决策：“为什么这样设计”
-  6. 结尾说明 Lab 要实现什么
+1. **大纲确认后立即落盘元数据**：
+   - 用户确认大纲（及 `mode`: 默认 `challenge` 或 `guided`）后，**立刻写入** `.promentor/course.json`（所有章初始 `generation_status: "pending"`）与 `.promentor/progress.json`（所有章初始 `status: "not_started"`），并追加 `.promentor/` 到目标项目 `.gitignore`。
+   - 这样即使在生成任一章节中途断线，`/promentor init --resume` 也能可靠恢复！
+2. **默认仅生成首章（`generation_mode: "lazy"`）**：
+   - 默认 `/promentor init` 只生成大纲中的**第 1 章**（通过 Red-State 自检后将 `course.json` 该章更新为 `generation_status: "generated"`），随后提示用户直接 `/promentor learn <ch1>` 开学。
+   - 若用户明确指定 `/promentor init --all`，则设置 `generation_mode: "all"`，按顺序逐章生成并每章完成自检后即时更新 `course.json`。
+3. **后续章节按需动态生成**：
+   - 当用户执行 `/promentor learn <ch>` 进入一个 `generation_status != "generated"`（或文件残缺）的章节时，现场读取原始源码（依据 `course.json`）及前置章节学生的实际实现，动态生成本章全部产物并通过 Red-State 自检，更新 `course.json` 为 `"generated"` 后无缝进入教学。
 
-### `source.md`
+---
 
-- **输入**：本章相关原始源码文件
-- **要求**：
-  1. 列出关键文件和行号范围
-  2. 每段标注解释“在做什么、为什么这样做”
-  3. 标注关键数据结构定义、核心算法逻辑与关键技巧
-  4. 只标注与本章概念相关的内容
+## 4.5 Chapter 生成规范
 
-### `lab.json`
+每生成一章前，先将该章在 `course.json` 中的 `generation_status` 置为 `"in_progress"`；全部产物落盘并通过 Red-State 自检后再更新为 `"generated"`。
 
-- **输入**：原始源码中的核心接口
-- **要求**：
-  1. 定义学生需要实现的类型和函数签名
-  2. 签名精确（参数名、类型、返回值）
-  3. 包含可运行的 `test_command`
+### 1. `lecture.md`（概念与设计决策讲义）
+- 篇幅 **≤ 300 行**。
+- 结构：开篇定位 → 核心概念与问题拆解 → 设计决策与替代方案权衡 → Mermaid 图表 → 衔接 Lab。
+- **防剧透原则**：在 `challenge` 模式下，可讨论思路、抽象契约与复杂度权衡，**严禁贴出待实现核心算法的完整原始实现代码**。
+- **Mermaid 可视化规范**（零构建依赖，确保所有 Markdown 渲染器直接可读）：
+  - 架构总览 / 模块依赖 → `flowchart TD` 或 `flowchart LR`
+  - 请求 / 数据生命周期 → `sequenceDiagram`
+  - 核心类型 / 接口关系 → `classDiagram`
+  - 节点标签含括号/特殊字符时用双引号包裹（如 `A["Router (Radix Tree)"]`），不使用 HTML 标签。
 
-### `lab_test.<ext>`
+### 2. `source.md`（两阶段源码导读）
+- 严格拆分为两个顶级分区（完整模板见 `references/data-format.md` §1.7）：
+  - `## Part 1: 写前导读（Pre-Lab · 契约与边界）`：模块定位、Mermaid 交互图、外部接口签名与调用入口；隐藏内部核心算法细节。
+  - `## Part 2: 提交后深读（Post-Submit · 核心实现剖析）`：在 `/promentor review` 解锁，逐段标注核心数据结构、关键算法与边界处理的精确行号及“为什么”。
+- **行号核对**：写入前必须通过读取原文件核对实际行号，确保每处 `path/to/file:start-end` 真实存在且未越界。
 
-- **输入**：原始源码的核心逻辑
-- **要求**：
-  1. 黑盒测试：只验证输入输出，不耦合内部实现
-  2. 使用目标语言原生测试框架
-  3. 覆盖正常路径、边界情况与错误处理
-  4. 通过 import 引入学生的包或模块
-  5. 放在 `.promentor/chapters/{chapter_id}/` 下，可独立编译运行
+### 3. `lab.json`（Lab 契约定义）
+- 严格遵守 `references/data-format.md` §1.5：声明精确的 `files`、`starter_files`、`test_file`、`interface.types`、`interface.functions`、`test_command` 与可选 `notes`。
+- `test_checksum` 在 Red-State 自检通过后立即计算并写回。
 
-### 可运行入口（Final / 组装章）
+### 4. Starter Stub（骨架代码）
+- 按 `lab.json` 中 `files` 与 `interface` 在 `.promentor/chapters/{chapter_id}/` 直接创建全部骨架文件，消除学生手抄签名、拼错包路径的编译卡顿。
+- **必须包含**：合法包/模块声明、所需标准库 import、导出类型定义、严格匹配的导出函数/方法签名、清晰文档注释（含契约与边界要求）。
+- **空实现体**：使用语言惯用的未实现占位（如 Go `panic("not implemented")`、Python `raise NotImplementedError(...)`、TS/JS `throw new Error("not implemented")`、Rust `todo!()`、Java `throw new UnsupportedOperationException(...)`）。
+- **严禁在骨架中剧透核心算法或写好关键实现**。
 
-Final 章组装出顶层组件后，额外生成一个可运行入口，让课程“学完即能跑”：
+### 5. `lab_test.<ext>`（分层黑盒行为测试）
+- 按 §4.6 与 `references/languages.md` 编写，命名贴合目标语言测试框架（`lab_test.go`、`test_lab.py`、`lab.test.ts` 等）。
 
-1. 入口文件放在课程根目录（如 `.promentor/main.go`、`main.py`、`index.js`），与章节目录分离，避免包/模块冲突
-2. 入口仅做三件事：初始化数据层、构造顶层组件、启动运行时（CLI / TUI / Web 按项目实际选择）
-3. 在 `lab.json` 的 `notes` 中写明运行命令（如 `go run .promentor`、`python3 .promentor/main.py`、`node .promentor/index.js`）
-4. 生成后用目标语言的构建或语法检查工具（如 `go build`、`python3 -m py_compile`、`tsc --noEmit`）验证可用
+### 6. Final / 组装章可运行入口
+- 仅在 Final / 组装章额外于课程根目录生成可运行入口（如 `.promentor/main.go`、`.promentor/main.py`、`.promentor/index.ts`），与章节目录分离避免包冲突。
+- 入口仅做三件事：初始化数据层 → 组装顶层组件 → 启动运行时（CLI / HTTP / TUI）。
+- 在 Final 章 `lab.json` 的 `notes` 中写明运行命令（如 `go run ./.promentor`、`python3 .promentor/main.py`、`node .promentor/index.ts`），并在生成后执行语法/构建检查（如 `go build ./.promentor`、`python3 -m py_compile`、`node --check`）。
 
-## 4.5 测试生成规范
+---
 
-**黑盒原则**：不关心学生内部实现，只校验输入输出是否正确。
+## 4.6 分层测试与 Red-State 自检规范
 
-**Go 示例**：
+### 黑盒原则与三层测试组织
+
+所有行为测试只验证公开接口的输入/输出与可观测行为，不耦合内部私有字段，并在测试文件中明确划分为三层：
+
+| 层级 | 名称 | 覆盖内容 |
+| --- | --- | --- |
+| **Part A** | 基础行为（Core Behavior） | 主干成功路径、典型输入输出、核心契约 |
+| **Part B** | 边界与异常（Edge Cases & Errors） | 空输入、不存在的键、非法参数、重复注册、错误码/异常返回 |
+| **Part C** | 并发 / 性能 / 扩展场景（Concurrency / Scale / Stretch） | 按项目真实特性选用：并发安全、较大量级复杂度、嵌套组合或协议进阶特性 |
+
+### 路径安全示例
+
+**Go 示例**（外部测试包 + 清晰分层；若宿主有 `go.mod` 使用 `<host_module>/.promentor/chapters/ch02-router`，若使用独立 `.promentor/go.mod` 使用 `promentor/course/chapters/ch02-router`）：
 
 ```go
 package router_test
 
 import (
-    "testing"
-    student "github.com/user/project/.promentor/chapters/ch02-router"
+	"net/http"
+	"testing"
+
+	student "promentor/course/chapters/ch02-router"
 )
 
-func TestStaticRoute(t *testing.T) {
-    r := student.NewRouter()
-    var called bool
-    r.AddRoute("GET", "/users", func(w http.ResponseWriter, req *http.Request) {
-        called = true
-        w.WriteHeader(200)
-    })
-    handler, _ := r.FindRoute("GET", "/users")
-    if handler == nil {
-        t.Fatal("GET /users: 未找到路由处理函数")
-    }
+// Part A: 基础行为
+func TestPartA_StaticRoute(t *testing.T) {
+	r := student.NewRouter()
+	r.AddRoute("GET", "/users", func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	h, _ := r.FindRoute("GET", "/users")
+	if h == nil {
+		t.Fatal("GET /users: expected handler, got nil")
+	}
+}
+
+// Part B: 边界与异常
+func TestPartB_MethodMismatch(t *testing.T) {
+	r := student.NewRouter()
+	r.AddRoute("GET", "/users", func(w http.ResponseWriter, req *http.Request) {})
+	h, _ := r.FindRoute("POST", "/users")
+	if h != nil {
+		t.Fatal("POST /users: expected nil handler on method mismatch")
+	}
+}
+
+// Part C: 嵌套参数与优先级
+func TestPartC_StaticPriorityOverParam(t *testing.T) {
+	r := student.NewRouter()
+	var hit string
+	r.AddRoute("GET", "/users/:id", func(w http.ResponseWriter, req *http.Request) { hit = "param" })
+	r.AddRoute("GET", "/users/me", func(w http.ResponseWriter, req *http.Request) { hit = "static" })
+	h, _ := r.FindRoute("GET", "/users/me")
+	if h == nil {
+		t.Fatal("GET /users/me: expected handler")
+	}
+	h(nil, nil)
+	if hit != "static" {
+		t.Fatalf("expected static route priority, got %q", hit)
+	}
 }
 ```
 
-**Python 示例**：
+**Python 示例**（使用 `Path(__file__).resolve().parent` 解析路径，绝不硬编码 `.promentor/chapters/...`）：
 
 ```python
-import pytest
+from pathlib import Path
 import sys
-sys.path.insert(0, ".promentor/chapters/ch02-router")
+import unittest
+
+CHAPTER_DIR = Path(__file__).resolve().parent
+if str(CHAPTER_DIR) not in sys.path:
+    sys.path.insert(0, str(CHAPTER_DIR))
+
 from router import Router
 
-def test_static_route():
-    r = Router()
-    called = False
-    def handler(request):
-        nonlocal called
-        called = True
-        return {"status": 200}
-    r.add_route("GET", "/users", handler)
-    h, params = r.find_route("GET", "/users")
-    assert h is not None, "GET /users: 未找到路由处理函数"
+
+class TestPartACoreBehavior(unittest.TestCase):
+    def test_static_route(self) -> None:
+        r = Router()
+        r.add_route("GET", "/users", lambda req: {"status": 200})
+        handler, params = r.find_route("GET", "/users")
+        self.assertIsNotNone(handler, "GET /users: 未找到路由处理函数")
+        self.assertEqual(params, {})
+
+
+class TestPartBEdgeCases(unittest.TestCase):
+    def test_method_mismatch_returns_none(self) -> None:
+        r = Router()
+        r.add_route("GET", "/users", lambda req: {"status": 200})
+        handler, _ = r.find_route("POST", "/users")
+        self.assertIsNone(handler)
+
+
+if __name__ == "__main__":
+    unittest.main()
 ```
 
-**关键约束**：
-- 测试文件与学生实现分属不同包 / 模块，通过 import 引入
-- 覆盖正常路径、参数路径、错误方法、边界输入与嵌套参数
-- 测试名称清晰描述测试场景
+### 生成期 Red-State 自检（强制门禁）
 
-## 4.6 跨章 lab 依赖解耦
+每章产物写完后，**必须立即**在项目根目录执行该章 `lab.json` 的 `test_command`（替换 `{chapter_dir}`），核验以下 3 点：
 
-按依赖顺序学习时，后续章节的包尚未实现（如 Ch4 依赖 Ch2 的 store，而 Ch5 的 form 尚未编写）。生成 lab 时遵守：
+1. **成功编译/加载**：无语法错误、无类型签名不匹配、无 `ImportError` / `ModuleNotFoundError` / 找不到包 / 命令不存在等环境问题。
+2. **测试实际执行且按预期失败（Red State）**：进程返回非零退出码，且失败原因是骨架代码的 `not implemented` / `NotImplementedError` / `panic` 或行为断言失败，而非 0 tests collected。
+3. **计算并写入 `test_checksum`**：自检通过后计算 `test_file` 的 SHA-256（`sha256:<64位小写十六进制>`）写入 `lab.json`，再将 `course.json` 该章的 `generation_status` 置为 `"generated"`。
 
-1. **前置依赖只指向已完成章节**：`prerequisites` 真实反映模块依赖；学生代码只能引用前置章节。
-2. **暂缺依赖用 `notes` 声明**：后章能力未实现时，当前章相关入口在 `lab.json` 的 `notes` 中说明“先返回自身 / 占位”，测试不覆盖该行为。
-3. **跨模块消息 / 类型由课程模块导出**：组件间传递的自定义消息或类型定义在学生当前模块中，避免测试直接依赖真实项目源码。
-4. **禁止循环依赖**：若 A 章需进入 B 章页面、B 章需返回 A 章页面，只保留单向依赖（A → B），B 的返回退回自身或占位，完整闭环作为挑战题写入 `notes`。
-5. **测试断言与真实行为对齐**：黑盒断言必须与原始设计一致，避免误杀正确实现。
+若自检遇到编译、导入、路径或框架配置错误，**当场修复并重新验证**，禁止带着坏掉的测试进入教学或下一章。
+
+---
+
+## 4.7 跨章 Lab 依赖解耦
+
+按依赖顺序学习时，后置章节尚未编写。生成 Lab 时遵守：
+
+1. **单向依赖**：`prerequisites` 只指向已定义的前置章节；学生代码只允许引用前置章节产物，禁止循环依赖。
+2. **暂缺依赖占位**：后置章节能力未实现时，在 `lab.json` 的 `notes` 中写明占位行为（如“先返回自身 / 忽略中间件”），测试不覆盖暂缺能力。
+3. **共享契约独立导出**：跨章节传递的消息、请求结构或接口定义在课程章节自身模块中导出，避免直接耦合宿主私有包。
+4. **断言与原项目对齐**：黑盒断言严格贴合原始项目行为，避免因为测试过度假定实现细节而误杀正确解法。

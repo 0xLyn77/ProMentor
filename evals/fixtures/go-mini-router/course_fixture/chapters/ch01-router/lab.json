@@ -1,0 +1,51 @@
+{
+  "chapter_id": "ch01-router",
+  "title": "HTTP 路由匹配与优先级设计",
+  "description": "实现支持 HTTP 方法隔离、路径参数提取与静态优先级的路由器",
+  "language": "go",
+  "package": "router",
+  "files": [
+    {
+      "path": "router.go",
+      "description": "路由器核心数据结构与匹配实现"
+    }
+  ],
+  "starter_files": [
+    "router.go"
+  ],
+  "test_file": "lab_test.go",
+  "test_checksum": "sha256:777febf46ac54b6f65ffa3b90de53294e06280d7a362d15d48349c8c86bbf304",
+  "interface": {
+    "types": [
+      {
+        "name": "Handler",
+        "kind": "type",
+        "doc": "type Handler func(w http.ResponseWriter, req *http.Request, params map[string]string)"
+      },
+      {
+        "name": "Router",
+        "kind": "struct",
+        "doc": "HTTP 路由器，按方法存储路由规则并执行匹配"
+      }
+    ],
+    "functions": [
+      {
+        "signature": "func NewRouter() *Router",
+        "doc": "创建空的 Router 实例"
+      },
+      {
+        "signature": "func (r *Router) AddRoute(method, path string, handler Handler)",
+        "doc": "注册路由规则，支持 :param 参数段"
+      },
+      {
+        "signature": "func (r *Router) FindRoute(method, path string) (Handler, map[string]string)",
+        "doc": "查找匹配的 Handler 与路径参数，静态段优先于参数段"
+      }
+    ]
+  },
+  "test_command": "cd {chapter_dir} && go test -v .",
+  "notes": [
+    "中间件责任链将在 ch02-middleware 实现，本章无需处理中间件。",
+    "扩展挑战：首次 Review 后尝试用按段前缀树替代线性扫描并重新提交。"
+  ]
+}

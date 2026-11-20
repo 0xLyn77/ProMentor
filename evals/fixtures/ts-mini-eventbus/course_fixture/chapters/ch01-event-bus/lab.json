@@ -1,0 +1,51 @@
+{
+  "chapter_id": "ch01-event-bus",
+  "title": "异步事件总线与通配符主题匹配",
+  "description": "实现支持单段通配符匹配与派发期安全退订的异步 EventBus",
+  "language": "typescript",
+  "package": "event_bus",
+  "files": [
+    {
+      "path": "event_bus.ts",
+      "description": "主题匹配函数与异步 EventBus 实现"
+    }
+  ],
+  "starter_files": [
+    "event_bus.ts"
+  ],
+  "test_file": "lab.test.ts",
+  "test_checksum": "sha256:04184e92aa9ee5d99237d7874203f543a327f8aacfa1a315af3b5d2b337cb465",
+  "interface": {
+    "types": [
+      {
+        "name": "EventHandler",
+        "kind": "type",
+        "doc": "(payload: T, topic: string) => void | Promise<void>"
+      },
+      {
+        "name": "EventBus",
+        "kind": "class",
+        "doc": "异步主题事件总线"
+      }
+    ],
+    "functions": [
+      {
+        "signature": "export function matchTopic(pattern: string, topic: string): boolean",
+        "doc": "匹配点分主题与单段 * 通配符模式"
+      },
+      {
+        "signature": "on<T = unknown>(pattern: string, handler: EventHandler<T>): () => void",
+        "doc": "订阅主题模式并返回幂等取消订阅函数"
+      },
+      {
+        "signature": "async emit<T = unknown>(topic: string, payload: T): Promise<number>",
+        "doc": "按注册顺序异步派发匹配订阅者，返回触发数量"
+      }
+    ]
+  },
+  "test_command": "cd {chapter_dir} && node --test lab.test.ts",
+  "notes": [
+    "异步中间件管道将在 ch02-pipeline 实现，本章直接顺序执行匹配 handler。",
+    "扩展挑战：首次 Review 后预拆订阅模式段，减少 emit 热路径重复字符串 split。"
+  ]
+}
