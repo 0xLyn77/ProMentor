@@ -15,5 +15,6 @@ __pycache__/
 # Course data
 .promentor/
 
-# Local docs
+# Local docs & evals
 docs/
+evals/

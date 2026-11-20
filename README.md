@@ -23,7 +23,7 @@ ProMentor 是一个 **AI Coding Agent Skill**。安装后，你的 AI 编程助�
 ### 方式一：Skills CLI（推荐）
 
 ```bash
-npx skills add Lyn-77/ProMentor
+npx skills add 0xLyn77/ProMentor
 ```
 
 ### 方式二：手动安装
@@ -31,7 +31,7 @@ npx skills add Lyn-77/ProMentor
 克隆仓库并将 `skills/promentor/` 复制到你的 Agent 技能目录：
 
 ```bash
-git clone https://github.com/Lyn-77/ProMentor.git
+git clone https://github.com/0xLyn77/ProMentor.git
 
 # 全局安装（按你使用的 Agent 选择其一）
 cp -r ProMentor/skills/promentor ~/.claude/skills/promentor    # Claude Code
@@ -54,19 +54,19 @@ cp -r ProMentor/skills/promentor ~/.agents/skills/promentor    # 通用 Agent �
 
 支持显式斜杠命令，也支持自然语言直接交互（如“帮我测一下”“卡住了”“交作业”“对比下源码”）：
 
-| 命令                              | 说明                                                        |
-| --------------------------------- | ----------------------------------------------------------- |
-| `/promentor init`                 | 扫描项目架构，确认大纲后默认按需生成第 1 章并通过自检       |
-| `/promentor init --focus <模块>`  | 聚焦特定子系统（如路由层、存储引擎），规划 3–5 章精简课程   |
-| `/promentor init --all`           | 确认大纲后一次性逐章生成全部章节                            |
-| `/promentor init --resume`        | 逐章校验文件与校验和完整性，从中断或残缺处继续生成          |
-| `/promentor`                      | 查看课程目录、生成状态与总体进度面板                        |
-| `/promentor learn <ch>`           | 进入指定章节（支持 `ch01`、`1`、`router`、`final` 等简写）  |
-| `/promentor test`                 | 运行当前章节的分层行为测试（Part A/B/C）并诊断失败原因      |
-| `/promentor hint`                 | 读取当前代码与报错，触发防代写护栏并给出 Level 1–3 分层提示 |
-| `/promentor submit`               | 校验测试完整性并全量跑通，目录制归档提交并锁定 100% 成绩    |
-| `/promentor review`               | 解锁提交后源码深读、落盘 Review 报告，二次提交自动增量对比  |
-| `/promentor progress`             | 查看各章节完成度、提交次数、提示层级与总体进度              |
+| 命令                             | 说明                                                        |
+| -------------------------------- | ----------------------------------------------------------- |
+| `/promentor init`                | 扫描项目架构，确认大纲后默认按需生成第 1 章并通过自检       |
+| `/promentor init --focus <模块>` | 聚焦特定子系统（如路由层、存储引擎），规划 3–5 章精简课程   |
+| `/promentor init --all`          | 确认大纲后一次性逐章生成全部章节                            |
+| `/promentor init --resume`       | 逐章校验文件与校验和完整性，从中断或残缺处继续生成          |
+| `/promentor`                     | 查看课程目录、生成状态与总体进度面板                        |
+| `/promentor learn <ch>`          | 进入指定章节（支持 `ch01`、`1`、`router`、`final` 等简写）  |
+| `/promentor test`                | 运行当前章节的分层行为测试（Part A/B/C）并诊断失败原因      |
+| `/promentor hint`                | 读取当前代码与报错，触发防代写护栏并给出 Level 1–3 分层提示 |
+| `/promentor submit`              | 校验测试完整性并全量跑通，目录制归档提交并锁定 100% 成绩    |
+| `/promentor review`              | 解锁提交后源码深读、落盘 Review 报告，二次提交自动增量对比  |
+| `/promentor progress`            | 查看各章节完成度、提交次数、提示层级与总体进度              |
 
 ## 生成的课程目录
 
@@ -100,10 +100,6 @@ cp -r ProMentor/skills/promentor ~/.agents/skills/promentor    # 通用 Agent �
 - **对比与重构闭环**：每次提交支持目录制归档与 Review 落盘，支持完成 Challenge 重构后对 `attempt_1` vs `attempt_2` vs 原项目源码做三方增量对比。
 - **零构建可视化**：以纯文本 Markdown + Mermaid（`flowchart` / `sequenceDiagram` / `classDiagram`）交付架构与调用链图解。
 
-## 仓库开发自检（Maintainers）
+## License
 
-仓库根目录的 `evals/` 提供纯标准库 Smoke Test 与规范校验套件（不打入 `skills/promentor/` 安装包）：
-
-```bash
-python3 evals/run_smoke.py
-```
+[MIT](LICENSE)
