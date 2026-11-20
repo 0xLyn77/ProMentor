@@ -394,6 +394,42 @@ class TestValidateCourseNegativeCases(unittest.TestCase):
             self.assertEqual(prog["chapters"]["ch01-kv-ttl"]["status"], "completed")
             self.assertEqual(prog["chapters"]["ch01-kv-ttl"]["score"], 100)
 
+    def test_cli_test_subcommand_unparsed_language_uses_exit_code(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            work = self._setup_fixture(FIXTURE_PY, Path(td))
+            ch_dir = work / ".promentor" / "chapters" / "ch01-kv-ttl"
+            lab_path = ch_dir / "lab.json"
+            lab = json.loads(lab_path.read_text(encoding="utf-8"))
+            lab["language"] = "rust"
+            lab["test_command"] = f"{sys.executable} -c 'import sys; sys.exit(1)'"
+            lab_path.write_text(json.dumps(lab, indent=2), encoding="utf-8")
+
+            p_fail = subprocess.run(
+                [sys.executable, str(PROMENTOR_CLI), "--root", str(work), "test", "ch01-kv-ttl"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(p_fail.returncode, 0)
+            self.assertIn("SUMMARY: ch01-kv-ttl passed=unknown score=0 status=in_progress", p_fail.stdout)
+            self.assertNotIn("ALL_PASSED", p_fail.stdout)
+
+            lab["test_command"] = f"{sys.executable} -c 'print(\"test result: ok.\")'"
+            lab_path.write_text(json.dumps(lab, indent=2), encoding="utf-8")
+
+            p_pass = subprocess.run(
+                [sys.executable, str(PROMENTOR_CLI), "--root", str(work), "test", "ch01-kv-ttl"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(p_pass.returncode, 0, p_pass.stdout + p_pass.stderr)
+            self.assertIn("ALL_PASSED", p_pass.stdout)
+            self.assertIn("SUMMARY: ch01-kv-ttl passed=all score=99 status=in_progress", p_pass.stdout)
+            prog = json.loads((work / ".promentor" / "progress.json").read_text(encoding="utf-8"))
+            self.assertEqual(prog["chapters"]["ch01-kv-ttl"]["score"], 99)
+            self.assertEqual(prog["chapters"]["ch01-kv-ttl"]["status"], "in_progress")
+
 
 if __name__ == "__main__":
     unittest.main()

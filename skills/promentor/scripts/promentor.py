@@ -735,6 +735,7 @@ def cmd_test(project_root: Path, chapter_id: str | None) -> int:
     executed = count_executed_tests(language, combined)
     passed = count_passed_tests(language, combined)
 
+    counts_supported = declared is not None or executed is not None or passed is not None
     total = max(declared or 0, executed or 0)
     passed_val = passed if passed is not None else 0
 
@@ -743,20 +744,29 @@ def cmd_test(project_root: Path, chapter_id: str | None) -> int:
     status = ch_prog.get("status", "unknown") if isinstance(ch_prog, dict) else "unknown"
     score = ch_prog.get("score", 0) if isinstance(ch_prog, dict) else 0
 
-    all_passed = proc.returncode == 0 and total > 0 and passed_val == total
-    if isinstance(ch_prog, dict) and status == "in_progress" and total > 0:
-        if all_passed:
-            # Keep status in_progress and score < 100 until formal /promentor submit.
+    if counts_supported:
+        all_passed = proc.returncode == 0 and total > 0 and passed_val == total
+        if isinstance(ch_prog, dict) and status == "in_progress" and total > 0:
+            if all_passed:
+                # Keep status in_progress and score < 100 until formal /promentor submit.
+                ch_prog["score"] = 99
+                score = 99
+            else:
+                score = min((passed_val * 100) // total, 99)
+                ch_prog["score"] = score
+            progress_path.write_text(json.dumps(progress, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        passed_summary = f"{passed_val}/{total}"
+    else:
+        all_passed = proc.returncode == 0
+        if isinstance(ch_prog, dict) and status == "in_progress" and all_passed:
             ch_prog["score"] = 99
             score = 99
-        else:
-            score = min((passed_val * 100) // total, 99)
-            ch_prog["score"] = score
-        progress_path.write_text(json.dumps(progress, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            progress_path.write_text(json.dumps(progress, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        passed_summary = "all" if all_passed else "unknown"
 
     if all_passed and status == "in_progress":
         print(f"ALL_PASSED (100% ready to submit): run /promentor submit to archive {target_ch} and lock 100%")
-    print(f"SUMMARY: {target_ch} passed={passed_val}/{total} score={score} status={status}")
+    print(f"SUMMARY: {target_ch} passed={passed_summary} score={score} status={status}")
     return 0 if proc.returncode == 0 else 1
 
 
