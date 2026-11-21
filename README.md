@@ -1,104 +1,106 @@
 # ProMentor
 
-> 把任意开源项目转成 MIT 风格的动手工程课程，在实践中掌握系统设计。
+English | [简体中文](README_CN.md)
 
-ProMentor 是一个 **AI Coding Agent Skill**。安装后，你的 AI 编程助手会化身为工程导师：扫描目标项目架构、规划阶梯式章节、按需生成讲义与防剧透源码导读、自动创建可编译的骨架代码与分层行为测试，并在你手写实现后判题、提供防代写分层提示、解锁源码深读与二次重构增量 Review。
+> Turn any open-source repository into an MIT-style hands-on engineering course and master system design by building it yourself.
 
-## 工作流
+ProMentor is an **AI Coding Agent Skill**. Once installed, your AI coding assistant becomes an engineering mentor: it scans the target project's architecture, plans a progressive syllabus, generates lectures and anti-spoiler source walkthroughs on demand, scaffolds compilable starter stubs with layered behavioral tests, grades your implementation, provides anti-ghostwriting layered hints, and unlocks deep source comparison reviews with iterative refactoring feedback.
+
+## Workflow
 
 ```text
-扫描架构 & 确认大纲            (/promentor init [--focus <模块>] [--all])
+Scan Architecture & Confirm Syllabus       (/promentor init [--focus <module>] [--all])
         ↓
-概念讲解 & 写前契约导读        (/promentor learn <ch> · 按需生成章节)
+Lectures & Pre-Lab Contract Walkthrough    (/promentor learn <ch> · lazy generation)
         ↓
-手写实现 & 分层行为测试        (/promentor test · /promentor hint 防代写护栏)
+Hands-On Coding & Layered Behavioral Tests (/promentor test · /promentor hint guardrails)
         ↓
-防篡改校验 & 正式归档提交      (/promentor submit → attempt_N/)
+Tamper Check & Atomic Submission Archive   (/promentor submit → attempt_N/)
         ↓
-解锁源码深读 & 对比 Review     (/promentor review → review_N.md · 支持二次重构增量对比)
+Unlock Deep Source Read & Code Review      (/promentor review → review_N.md · 3-way refactor diff)
 ```
 
-## 安装
+## Installation
 
-### 方式一：Skills CLI（推荐）
+### Option 1: Skills CLI (Recommended)
 
 ```bash
 npx skills add 0xLyn77/ProMentor
 ```
 
-### 方式二：手动安装
+### Option 2: Manual Installation
 
-克隆仓库并将 `skills/promentor/` 复制到你的 Agent 技能目录：
+Clone this repository and copy `skills/promentor/` into your agent's skills directory:
 
 ```bash
 git clone https://github.com/0xLyn77/ProMentor.git
 
-# 全局安装（按你使用的 Agent 选择其一）
+# Global installation (pick the directory for your agent)
 cp -r ProMentor/skills/promentor ~/.claude/skills/promentor    # Claude Code
 cp -r ProMentor/skills/promentor ~/.codex/skills/promentor     # Codex
-cp -r ProMentor/skills/promentor ~/.agents/skills/promentor    # 通用 Agent 目录
+cp -r ProMentor/skills/promentor ~/.agents/skills/promentor    # Generic Agent directory
 ```
 
-如需仅在单个项目中启用，可复制到该项目根目录的 `.claude/skills/promentor` 或 `.agents/skills/promentor`。
+To enable ProMentor for a single project only, copy it to `.claude/skills/promentor` or `.agents/skills/promentor` inside that project's root directory.
 
-## 快速上手
+## Quick Start
 
-在 AI 编程助手中打开任意想学习的项目目录：
+Open any codebase you want to learn in your AI coding assistant:
 
-1. **生成课程**：运行 `/promentor init`（或 `/promentor init --focus 路由层` 聚焦单一子系统）。AI 扫描项目架构并输出大纲，确认后立即落盘课程元数据，默认先生成第 1 章骨架与行为测试并通过 Red-State 自检；如需一次性生成全量章节可用 `/promentor init --all`。
-2. **开始学习**：运行 `/promentor learn ch01`（或直接说“开始学第 1 章”）。若目标章节尚未生成，AI 会结合前置实现按需生成；在默认 `challenge` 防剧透模式下，先讲解概念、Mermaid 架构图与写前契约，再给出骨架代码位置。
-3. **实现与调试**：在章节目录的骨架文件中手写实现，说“帮我测一下”或运行 `/promentor test` 查看 Part A/B/C 分层结果；卡住时说“给点提示”或运行 `/promentor hint`，防代写护栏确保只给思路不替你改代码。
-4. **提交、深读与重构**：全部测试通过后运行 `/promentor submit` 校验测试未被篡改并目录制归档；再运行 `/promentor review` 解锁原项目核心源码行级深读、落盘 Review 报告并获取重构挑战——重构后可再次 `submit` + `review` 获取三方增量对比。
+1. **Generate a Course**: Run `/promentor init` (or `/promentor init --focus router` to target a single subsystem). The AI scans the architecture and proposes a syllabus; once confirmed, it immediately writes course metadata and generates Chapter 1 with starter stubs and behavioral tests verified in a clean Red State. Use `/promentor init --all` to generate all chapters upfront.
+2. **Start Learning**: Run `/promentor learn ch01` (or simply say "start chapter 1"). If a chapter has not been generated yet, ProMentor generates it on demand using the anchored source commit and your prior implementations. In the default `challenge` anti-spoiler mode, it walks through concepts, Mermaid architecture diagrams, and pre-lab interface contracts before pointing you to the starter stub.
+3. **Implement & Debug**: Write your implementation in the chapter's starter files, then say "run the tests" or run `/promentor test` to see Part A/B/C layered diagnostics. When stuck, ask for a hint or run `/promentor hint` — anti-ghostwriting guardrails ensure the agent gives structured guidance without editing your solution or spoiling the code.
+4. **Submit, Deep-Read & Refactor**: Once all tests pass, run `/promentor submit` to verify test integrity and atomically archive your submission. Then run `/promentor review` to unlock line-by-line deep source analysis, persist a structured review report, and get a concrete refactoring challenge — after refactoring, submit and review again for a 3-way incremental comparison.
 
-## 命令速查
+## Commands
 
-支持显式斜杠命令，也支持自然语言直接交互（如“帮我测一下”“卡住了”“交作业”“对比下源码”）：
+Both explicit slash commands and natural language prompts (e.g., "run the tests", "I'm stuck", "submit my solution", "compare with the original source") are supported:
 
-| 命令                             | 说明                                                        |
-| -------------------------------- | ----------------------------------------------------------- |
-| `/promentor init`                | 扫描项目架构，确认大纲后默认按需生成第 1 章并通过自检       |
-| `/promentor init --focus <模块>` | 聚焦特定子系统（如路由层、存储引擎），规划 3–5 章精简课程   |
-| `/promentor init --all`          | 确认大纲后一次性逐章生成全部章节                            |
-| `/promentor init --resume`       | 逐章校验文件与校验和完整性，从中断或残缺处继续生成          |
-| `/promentor`                     | 查看课程目录、生成状态与总体进度面板                        |
-| `/promentor learn <ch>`          | 进入指定章节（支持 `ch01`、`1`、`router`、`final` 等简写）  |
-| `/promentor test`                | 运行当前章节的分层行为测试（Part A/B/C）并诊断失败原因      |
-| `/promentor hint`                | 读取当前代码与报错，触发防代写护栏并给出 Level 1–3 分层提示 |
-| `/promentor submit`              | 校验测试完整性并全量跑通，目录制归档提交并锁定 100% 成绩    |
-| `/promentor review`              | 解锁提交后源码深读、落盘 Review 报告，二次提交自动增量对比  |
-| `/promentor progress`            | 查看各章节完成度、提交次数、提示层级与总体进度              |
+| Command                           | Description                                                                        |
+| --------------------------------- | ---------------------------------------------------------------------------------- |
+| `/promentor init`                 | Scan project architecture, confirm syllabus, and lazily generate Chapter 1         |
+| `/promentor init --focus <scope>` | Focus on a specific subsystem (e.g., router, storage engine) with 3–5 chapters     |
+| `/promentor init --all`           | Generate all chapters sequentially right after confirming the syllabus             |
+| `/promentor init --resume`        | Check chapter integrity and resume interrupted generation without overwriting code |
+| `/promentor`                      | Show the course syllabus, chapter generation status, and progress dashboard        |
+| `/promentor learn <ch>`           | Enter a chapter (supports shorthands like `ch01`, `1`, `router`, `final`)          |
+| `/promentor test`                 | Run layered behavioral tests (Part A/B/C) and diagnose failures                    |
+| `/promentor hint`                 | Inspect your code & errors and provide Level 1–3 hints under anti-ghostwriting rules |
+| `/promentor submit`               | Verify test checksum & full green pass, archive to `attempt_N/`, and lock 100%     |
+| `/promentor review`               | Unlock post-submit source deep read, save `review_N.md`, and diff refactors        |
+| `/promentor progress`             | View per-chapter completion, attempts, hint level reached, and overall progress    |
 
-## 生成的课程目录
+## Generated Course Layout
 
-运行 `/promentor init` 后，课程内容统一存放在目标项目根目录的 `.promentor/` 中（Git 仓库内自动写入 `.git/info/exclude`，不修改目标仓库的 `.gitignore`）：
+Running `/promentor init` stores all course artifacts in `.promentor/` at the target repository root (automatically ignored via `.git/info/exclude` in Git repos so the target project's tracked `.gitignore` stays untouched):
 
 ```text
 .promentor/
-├── course.json                    # 课程大纲、mode、focus、source_commit 与章节生成状态
-├── progress.json                  # 学习状态、得分、提交次数与提示层级
-├── main.<ext>                     # （仅 Final 章）课程根目录可运行入口
+├── course.json                    # Syllabus, mode, focus, source_commit, and generation status
+├── progress.json                  # Status, score, attempts, and highest hint level per chapter
+├── main.<ext>                     # (Final chapter only) runnable entry point at course root
 ├── chapters/
 │   └── ch01-<slug>/
-│       ├── lecture.md             # 概念讲解、设计权衡与 Mermaid 图表
-│       ├── source.md              # 两阶段源码导读（Part 1 写前契约 + Part 2 提交后深读）
-│       ├── lab.json               # Lab 契约、测试命令与 SHA-256 测试校验和
-│       ├── <starter>.<ext>        # 自动生成的骨架代码（学生直接在此实现）
-│       └── <test_file>            # 分层黑盒行为测试（只读，提交前防篡改校验）
+│       ├── lecture.md             # Concepts, design tradeoffs, and Mermaid diagrams
+│       ├── source.md              # Two-stage walkthrough (Part 1 Pre-Lab + Part 2 Post-Submit)
+│       ├── lab.json               # Lab contract, test command, and SHA-256 test checksum
+│       ├── <starter>.<ext>        # Auto-generated starter stub where you write your solution
+│       └── <test_file>            # Layered black-box behavioral tests (read-only, checksummed)
 └── submissions/
     └── ch01-<slug>/
-        ├── attempt_1/             # 目录制归档：完整保留多文件 Lab 的历次提交
-        ├── review_1.md            # 落盘的源码对比 Review 报告
-        ├── attempt_2/             # （可选）二次重构提交归档
-        └── review_2.md            # （可选）三方增量对比 Review 报告
+        ├── attempt_1/             # Directory-based archive preserving all multi-file lab sources
+        ├── review_1.md            # Persisted source comparison review report
+        ├── attempt_2/             # (Optional) refactored resubmission archive
+        └── review_2.md            # (Optional) 3-way incremental comparison review report
 ```
 
-## 特点
+## Key Features
 
-- **按需生成与子系统聚焦**：支持 Lazy Generation 边学边生成与 `--focus` 单子系统裁剪，降低大项目初始化耗时与行号偏移。
-- **开箱即用的骨架与自检**：自动生成可编译 Starter Stub，并在生成期实跑测试确保进入干净的 Red State，内置 Go / Python / TypeScript / Rust / Java / C++ 多语言隔离规范。
-- **防剧透 + 防代写双护栏**：默认 `challenge` 模式拆分写前导读与提交后深读；调试阶段强制锁定防代写护栏，确保真正动手训练。
-- **对比与重构闭环**：每次提交支持目录制归档与 Review 落盘，支持完成 Challenge 重构后对 `attempt_1` vs `attempt_2` vs 原项目源码做三方增量对比。
-- **零构建可视化**：以纯文本 Markdown + Mermaid（`flowchart` / `sequenceDiagram` / `classDiagram`）交付架构与调用链图解。
+- **Lazy Generation & Subsystem Focus**: Generate chapters on demand or narrow large codebases to a single subsystem via `--focus`, keeping initialization fast and line references anchored to `source_commit`.
+- **Ready-to-Run Starter Stubs & Red-State Gates**: Automatically scaffolds compilable starter code and executes every chapter's tests during generation to verify a clean Red State, with built-in isolation conventions for Go, Python, TypeScript/JavaScript, Rust, Java, and C/C++.
+- **Anti-Spoiler & Anti-Ghostwriting Guardrails**: Default `challenge` mode separates pre-lab contracts from post-submit deep dives, while strict guardrails prevent the coding agent from editing student lab files or pasting full solutions.
+- **Compare & Refactor Loop**: Directory-based submission archives and persisted review reports enable iterative refactoring with 3-way reviews comparing `attempt_1`, `attempt_2`, and the original upstream source.
+- **Zero-Build Visualization**: Plain Markdown plus native Mermaid diagrams (`flowchart`, `sequenceDiagram`, `classDiagram`) render cleanly across Markdown viewers with no dashboard build step.
 
 ## License
 
